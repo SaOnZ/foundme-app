@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
+import 'navigation_service.dart';
+import '../pages/chat_page.dart';
 
 class NotificationService {
   NotificationService._();
@@ -10,7 +13,12 @@ class NotificationService {
   final _messaging = FirebaseMessaging.instance;
   final _db = FirebaseFirestore.instance;
 
-  Future<void> init(BuildContext context) async {
+  final _foregroundMessageController =
+      StreamController<RemoteMessage>.broadcast();
+  Stream<RemoteMessage> get foregroundMessages =>
+      _foregroundMessageController.stream;
+
+  Future<void> init() async {
     // 1. Request permission from the user
     await _messaging.requestPermission();
 
@@ -27,14 +35,12 @@ class NotificationService {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {
         // Show a SnackBar or a local notification
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message.notification!.title ?? 'New Message'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _foregroundMessageController.add(message);
       }
     });
+
+    // 5. Handle taps
+    _setupInteractedMessage();
   }
 
   Future<void> _saveTokenToFirestore(String token) async {
@@ -50,7 +56,37 @@ class NotificationService {
     }
   }
 
-  // TODO in Part 3: Add handlers for when user taps a notification
-  // - FirebaseMessaging.onMessageOpenedApp.listen(...)
-  // - _messaging.getInitialMessage().then(...)
+  /// Handles any interaction with a notification (tap)
+  /// when the app is in the background or terminated.
+  void _setupInteractedMessage() {
+    // 1. Handles Taps when Ap is TERMINATED
+    // This gets the message that launched the app
+    FirebaseMessaging.instance.getInitialMessage().then((
+      RemoteMessage? message,
+    ) {
+      if (message != null) {
+        _handleMessage(message);
+      }
+    });
+
+    // 2. Handles Taps when App is in BACKGROUND
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+  }
+
+  /// Navigates to the correct page based on the notification data
+  void _handleMessage(RemoteMessage message) {
+    //Get the claimId from the data payload
+    final String? claimId = message.data['claimId'];
+
+    if (claimId != null) {
+      //Use the global key to navigate, no context needed!
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (context) => ChatPage(claimId: claimId)),
+      );
+    }
+  }
+
+  void dispose() {
+    _foregroundMessageController.close();
+  }
 }

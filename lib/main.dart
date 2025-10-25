@@ -7,12 +7,24 @@ import 'pages/register_page.dart';
 import 'pages/verify_email_page.dart';
 import 'pages/forgot_password_page.dart';
 import 'pages/home_page.dart';
-import 'services/notifications_service.dart';
+import 'services/navigation_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await NotificationService.instance.init();
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    if (e.toString().contains('[core/duplicate-app]')) {
+      // Firebase already initialized, proceed.
+    } else {
+      rethrow;
+    }
+  }
+
+  //  await NotificationService.instance.init();
   runApp(const FoundMeApp());
 }
 
@@ -23,6 +35,7 @@ class FoundMeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'FoundMe',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true),

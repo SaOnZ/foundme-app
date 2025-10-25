@@ -80,8 +80,10 @@ android {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // (no other changes needed)
-    implementation('com.google.firebase:firebase-bom:33.1.2')  // Firebase BOM
-    implementation 'com.google.firebase:firebase-messaging'
+//    implementation('com.google.firebase:firebase-bom:33.1.2')  // Firebase BOM
+//    implementation 'com.google.firebase:firebase-messaging'
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2")) // Firebase BOM
+    implementation("com.google.firebase:firebase-messaging")
 }
 flutter {
     source = "../.."

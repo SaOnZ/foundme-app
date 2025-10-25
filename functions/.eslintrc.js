@@ -1,45 +1,33 @@
-/*module.exports = {
+module.exports = {
+  root: true,
   env: {
     es6: true,
     node: true,
   },
-  parserOptions: {
-    "ecmaVersion": 2018,
-  },
   extends: [
     "eslint:recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "plugin:import/typescript",
     "google",
+    "plugin:@typescript-eslint/recommended",
   ],
-  rules: {
-    "no-restricted-globals": ["error", "name", "length"],
-    "prefer-arrow-callback": "error",
-    "quotes": ["error", "double", {"allowTemplateLiterals": true}],
+  parser: "@typescript-eslint/parser",
+  parserOptions: {
+    project: ["tsconfig.json", "tsconfig.dev.json"],
+    sourceType: "module",
   },
-  overrides: [
-    {
-      files: ["**//*.spec.*"],
-/*      env: {
-        mocha: true,
-      },
-      rules: {},
-    },
+  ignorePatterns: [
+    "/lib/**/*", // Ignore built files.
+    "/generated/**/*", // Ignore generated files.
   ],
-  globals: {},
-}; */
-
-module.exports = {
-  env: { es6: true, node: true },
-  parserOptions: { ecmaVersion: 2020 },
-  extends: ["eslint:recommended", "google"],
+  plugins: [
+    "@typescript-eslint",
+    "import",
+  ],
   rules: {
-    // keep code readable but not overly strict
-    "require-jsdoc": "off",
-    "max-len": ["error", { code: 120, ignoreUrls: true, ignoreStrings: true, ignoreTemplateLiterals: true }],
-    "object-curly-spacing": ["error", "always"],
-    "comma-dangle": "off",
-    "quotes": ["error", "double", { avoidEscape: true }],
+    "quotes": ["error", "double"],
+    "import/no-unresolved": 0,
     "indent": ["error", 2],
-    // optional: remove this if it ever complains about 'name' or 'length'
-    "no-restricted-globals": ["off"],
   },
 };
