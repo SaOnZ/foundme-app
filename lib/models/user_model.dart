@@ -6,6 +6,7 @@ class UserModel {
   final String email;
   final String role;
   final Timestamp createdAt;
+  final String? photoURL;
 
   UserModel({
     required this.uid,
@@ -13,6 +14,7 @@ class UserModel {
     required this.email,
     required this.role,
     required this.createdAt,
+    this.photoURL,
   });
 
   factory UserModel.fromDoc(DocumentSnapshot doc) {
@@ -23,6 +25,7 @@ class UserModel {
       email: data['email'] ?? '',
       role: data['role'] ?? 'user',
       createdAt: data['createdAt'] ?? Timestamp.now(),
+      photoURL: data['photoURL'],
     );
   }
 }

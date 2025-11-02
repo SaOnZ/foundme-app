@@ -4,6 +4,8 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/item_service.dart';
 import 'add_item_page.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -32,10 +34,20 @@ class ProfilePage extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const CircleAvatar(
-                    radius: 40,
-                    child: Icon(Icons.person, size: 40),
+                  InkWell(
+                    onTap: () => _showImageSourceDialog(context),
+                    child: CircleAvatar(
+                      radius: 40,
+                      // Show the user;s image if it exists, otherwise show placeholder
+                      backgroundImage: (user.photoURL != null)
+                          ? CachedNetworkImageProvider(user.photoURL!)
+                          : null,
+                      child: (user.photoURL == null)
+                          ? const Icon(Icons.person, size: 40)
+                          : null,
+                    ),
                   ),
+
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -129,6 +141,70 @@ class ProfilePage extends StatelessWidget {
         },
       ),
     );
+  }
+
+  void _showImageSourceDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        // use ctx to avoid conflict with context
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo (Camera)'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  // Pass the context to the next function
+                  _pickAndUploadImage(context, ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  // Pass the context to the next function
+                  _pickAndUploadImage(context, ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Handles picking, uploading, and error handling
+  Future<void> _pickAndUploadImage(
+    BuildContext context,
+    ImageSource source,
+  ) async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: source, imageQuality: 85);
+
+    if (file != null) {
+      // Check if the widget is still mounted before showing SnackBar
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Uploading image...')));
+
+      try {
+        await AuthService.instance.updateProfilePicture(file);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile picture updated!')),
+        );
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
+    }
   }
 
   void _showEditProfileDialog(BuildContext context, String currentName) {

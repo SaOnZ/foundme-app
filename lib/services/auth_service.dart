@@ -1,5 +1,8 @@
 // auth_service.dart
-
+import 'dart:io'; // For File
+import 'package:firebase_storage/firebase_storage.dart'; //For Storage
+import 'package:image_picker/image_picker.dart'; // For Image Picker
+import 'package:mime/mime.dart'; // For lookupMime Type
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -10,6 +13,7 @@ class AuthService {
 
   final _auth = FirebaseAuth.instance;
   final _users = FirebaseFirestore.instance.collection('users');
+  final _storage = FirebaseStorage.instance;
 
   //Streams / getters
   Stream<User?> authState() => _auth.authStateChanges();
@@ -111,6 +115,38 @@ class AuthService {
     if (u == null) return;
     await u.updateDisplayName(name.trim());
     await _users.doc(u.uid).set({'name': name.trim()}, SetOptions(merge: true));
+  }
+
+  // Upload default profile picture
+  Future<void> updateProfilePicture(XFile imageFile) async {
+    final u = _auth.currentUser;
+    if (u == null) return; // Not logged in
+
+    try {
+      final file = File(imageFile.path);
+      final contentType = lookupMimeType(imageFile.path) ?? 'image/jpeg';
+
+      // 1. Define storage path (profile_pictures/USER_ID/profile.jpg)
+      final ref = _storage.ref('profile_pictures/${u.uid}/profile.jpg');
+
+      // 2. Upload the file
+      final task = await ref.putFile(
+        file,
+        SettableMetadata(contentType: contentType),
+      );
+
+      // 3. Get the download URL
+      final url = await task.ref.getDownloadURL();
+
+      // 4. Save the URL to the user's document
+      await _users.doc(u.uid).set({'photoURL': url}, SetOptions(merge: true));
+
+      // 5. Update the FirebaseAuth profile as well
+      await u.updatePhotoURL(url);
+    } catch (e) {
+      // Handle errors (e.g., log them)
+      rethrow; // Rethrow to let the UI handle it
+    }
   }
 
   // ignore: unused_element
