@@ -8,6 +8,7 @@ import 'profile_page.dart';
 import '../services/notifications_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
+import 'map_view_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -47,6 +48,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final pages = [
       const FeedPage(),
+      const MapViewPage(),
       const _ClaimsHubPage(),
       const ProfilePage(),
     ];
@@ -55,8 +57,12 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: idx,
         onTap: (i) => setState(() => idx = i),
+
+        type: BottomNavigationBarType.fixed,
+
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Feed'),
+          BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: 'Map'),
           BottomNavigationBarItem(
             icon: Icon(Icons.handshake_outlined),
             label: 'Claims',

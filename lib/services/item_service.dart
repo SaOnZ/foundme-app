@@ -120,4 +120,23 @@ class ItemService {
               .toList(),
         );
   }
+
+  Stream<List<ItemModel>> allActiveItems() {
+    return _items
+        .where('status', isEqualTo: 'active')
+        .orderBy('postedAt', descending: true)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map((d) {
+                try {
+                  return ItemModel.fromDoc(d);
+                } catch (_) {
+                  return null;
+                }
+              })
+              .whereType<ItemModel>()
+              .toList(),
+        );
+  }
 }
