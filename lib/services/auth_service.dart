@@ -47,6 +47,17 @@ class AuthService {
     });
   }
 
+  /// Fetches a user's profile data once from Firestore.
+  Future<UserModel?> getUserProfile(String uid) async {
+    try {
+      final doc = await _users.doc(uid).get();
+      if (!doc.exists) return null;
+      return UserModel.fromDoc(doc);
+    } catch (e) {
+      return null;
+    }
+  }
+
   /*-------------Auth actions----------------*/
 
   Future<void> register({

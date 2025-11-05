@@ -9,6 +9,9 @@ class ClaimModel {
   final String status; // pending | accepted | rejected | closed
   final Timestamp createdAt;
 
+  final bool ownerHasReviewed;
+  final bool claimerHasReviewed;
+
   ClaimModel({
     required this.id,
     required this.itemId,
@@ -17,6 +20,9 @@ class ClaimModel {
     required this.message,
     required this.status,
     required this.createdAt,
+
+    required this.ownerHasReviewed,
+    required this.claimerHasReviewed,
   });
 
   factory ClaimModel.fromDoc(DocumentSnapshot d) {
@@ -31,6 +37,9 @@ class ClaimModel {
       createdAt: (m['createdAt'] is Timestamp)
           ? m['createdAt']
           : Timestamp.now(),
+
+      ownerHasReviewed: m['ownerHasReviewed'] ?? false,
+      claimerHasReviewed: m['claimerHasReviewed'] ?? false,
     );
   }
 }

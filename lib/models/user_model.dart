@@ -8,6 +8,9 @@ class UserModel {
   final Timestamp createdAt;
   final String? photoURL;
 
+  final double averageRating;
+  final int ratingCount;
+
   UserModel({
     required this.uid,
     required this.name,
@@ -15,10 +18,18 @@ class UserModel {
     required this.role,
     required this.createdAt,
     this.photoURL,
+
+    required this.averageRating,
+    required this.ratingCount,
   });
 
   factory UserModel.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+
+    // Helper to safely parse numbers
+    double _asDouble(dynamic v) => (v is num) ? v.toDouble() : 0.0;
+    int _asInt(dynamic v) => (v is num) ? v.toInt() : 0;
+
     return UserModel(
       uid: doc.id,
       name: data['name'] ?? '',
@@ -26,6 +37,9 @@ class UserModel {
       role: data['role'] ?? 'user',
       createdAt: data['createdAt'] ?? Timestamp.now(),
       photoURL: data['photoURL'],
+
+      averageRating: _asDouble(data['averageRating']),
+      ratingCount: _asInt(data['ratingCount']),
     );
   }
 }

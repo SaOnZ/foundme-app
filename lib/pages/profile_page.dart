@@ -58,6 +58,39 @@ class ProfilePage extends StatelessWidget {
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         Text(user.email),
+
+                        const SizedBox(height: 8),
+                        if (user.ratingCount > 0)
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.star,
+                                color: Colors.amber,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                user.averageRating.toStringAsFixed(1),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '(${user.ratingCount} ${user.ratingCount == 1 ? "review" : "reviews"})',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          const Text(
+                            'No reviews yet',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                          ),
                       ],
                     ),
                   ),

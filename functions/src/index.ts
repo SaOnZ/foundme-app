@@ -1,4 +1,5 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from  "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 
@@ -6,6 +7,139 @@ import * as logger from "firebase-functions/logger";
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
+
+// ===================================================================
+//  NEW FUNCTION: submitReview (Callable Function)
+// ===================================================================
+
+export const submitReview = onCall(async (request) => {
+  // 1. Get data from the app
+  const { claimId, roleToReview, rating } = request.data;
+  const callerUid = request.auth?.uid;
+
+  // 2. Authentication & Validation
+  if (!callerUid) {
+    throw new HttpsError(
+      "unauthenticated",
+      "You must be logged in to leave a review.",
+    );
+  }
+  if (!claimId || !roleToReview || !rating) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Missing required fields (claimId, roleToReview, rating).",
+    );
+  }
+  if (rating < 0.5 || rating > 5) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Rating must be between 0.5 and 5.",
+    );
+  }
+
+  // 3. Get the claim document
+  const claimRef = db.collection("claims").doc(claimId);
+  const claimDoc = await claimRef.get();
+  if (!claimDoc.exists) {
+    throw new HttpsError(
+      "not-found", 
+      "Claim not found.",
+    );
+  }
+  const claim = claimDoc.data()!;
+
+  //4. Security Check: Is the caller part of this claim?
+  if (callerUid !== claim.ownerUid && callerUid !== claim.claimerUid) {
+    throw new HttpsError(
+      "permission-denied",
+      "You are not authorized to review this claim.",
+    );
+  }
+
+  // 5. Determine who is being reviewed
+  let recipientUid: String;
+  let reviewFieldToUpdate: string;
+
+  if (roleToReview === "claimer") {
+    recipientUid = claim.claimerUid;
+    reviewFieldToUpdate = "ownerHasReviewed"; //The owner is reviewing
+    if (callerUid !== claim.ownerUid) {
+      throw new HttpsError(
+        "permission-denied",
+        "You are not the owner.",
+      );
+    }
+    if (claim.ownerHasReviewed === true) {
+      throw new HttpsError(
+        "failed-precondition",
+        "You have already reviewed the claimer.",
+      );
+    }
+  } else if (roleToReview === "owner") {
+    recipientUid = claim.ownerUid;
+    reviewFieldToUpdate = "claimerHasReviewed"; //The claimer is reviewing
+    if (callerUid !== claim.claimerUid) {
+      throw new HttpsError(
+        "permission-denied",
+        "You are not the claimer.",
+      );
+    }
+    if (claim.claimerHasReviewed === true) {
+      throw new HttpsError(
+        "failed-precondition",
+        "You have already reviewed this owner.",
+      );
+    }
+  } else {
+    throw new HttpsError(
+      "invalid-argument",
+      "roleToReview must be either 'claimer' or 'owner'.",
+    );
+  }
+  
+  // 6. Run a transaction to update the rating and claim
+  try {
+    await db.runTransaction(async (transaction) => {
+      const userRef = db.collection("users").doc(String(recipientUid));
+      const userDoc = await transaction.get(userRef);
+
+      if (!userDoc.exists) {
+        throw new HttpsError(
+          "not-found", "User not found."
+        );
+      }
+
+      // Get current rating data (or defaults)
+      const userData = userDoc.data()!;
+      const oldAvg = (userData.averageRating as number) || 0;
+      const oldCt = (userData.ratingCount as number) || 0;
+
+      // Calculate new rating
+      const newTotalRating = oldAvg * oldCt + rating;
+      const newCt = oldCt + 1;
+      const newAvg = newTotalRating / newCt;
+
+      // Update the user's profile
+      transaction.update(userRef, {
+        averagerating: newAvg,
+        ratingCount: newCt,
+      });
+
+      // Update the claim to mark this review as complete
+      transaction.update(claimRef, {
+        [reviewFieldToUpdate]: true,
+      });
+    });
+
+    logger.log('Review submitted for user ${recipientUid} by ${callerUid}.');
+    return { success: true, message: "Review submitted!" };
+  } catch (error) {
+    logger.error("Error submitting review:", error);
+    throw new HttpsError(
+      "internal", "Error submitting review."
+    );
+  }
+});
 
 /**
  * Triggers when a new claim is created.
@@ -111,7 +245,7 @@ export const onNewMessageV2 = onDocumentCreated("messages/{messageId}", async (e
         clickAction: "FLUTTER_NOTIFICATION_CLICK",
       },
       data: {
-        claimId: claimId,
+        claimId:  String(claimId),
         type: "chat",
       },
     };

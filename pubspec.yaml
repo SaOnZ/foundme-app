@@ -47,8 +47,9 @@ dependencies:
   uuid: ^4.5.1
   flutter_local_notifications: ^19.4.1
   mime: ^2.0.0
-
+  flutter_rating_bar: ^4.0.1
   cached_network_image: ^3.3.1
+  cloud_functions: ^6.0.3
 
 dev_dependencies:
   flutter_test:

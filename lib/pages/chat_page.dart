@@ -4,6 +4,7 @@ import '../services/claim_service.dart';
 import '../services/auth_service.dart';
 import '../models/chat_message.dart';
 import '../models/claim.dart';
+import '../widgets/rating_dialog.dart';
 
 class ChatPage extends StatefulWidget {
   final String claimId;
@@ -95,15 +96,36 @@ class _ChatPageState extends State<ChatPage> {
                   icon: const Icon(Icons.check_circle_outline),
                   onPressed: () async {
                     try {
+                      // 1. Close the claim
                       await ClaimService.instance.closeClaimAndItem(
                         widget.claimId,
                         data['itemId'],
                       );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Closed ✔')),
-                        );
-                      }
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('Closed ✔')));
+
+                      // 2. Get the claimer's ID
+                      final claimerUid = data['claimerUid'];
+
+                      // 3. Get their name using our new function
+                      final claimerProfile = await AuthService.instance
+                          .getUserProfile(claimerUid);
+                      final claimerName = claimerProfile?.name ?? 'the Claimer';
+
+                      if (!context.mounted) return;
+
+                      // 4.  Show the rating dialog
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false, // Don't let them skip it
+                        builder: (_) => RatingDialog(
+                          claimId: widget.claimId,
+                          roleToReview: 'claimer', // Owner rates the claimer
+                          personToReviewName: claimerName,
+                        ),
+                      );
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(
