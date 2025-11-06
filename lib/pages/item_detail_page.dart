@@ -4,6 +4,9 @@ import '../services/auth_service.dart';
 import '../services/claim_service.dart';
 import 'chat_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/report_dialog.dart';
+import 'profile_page.dart';
+import '../models/user_model.dart';
 
 class ItemDetailPage extends StatelessWidget {
   final ItemModel item;
@@ -17,7 +20,27 @@ class ItemDetailPage extends StatelessWidget {
     final isOwner = uid == item.ownerUid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Item detail')),
+      appBar: AppBar(
+        title: const Text('Item detail'),
+        actions: [
+          // Show report button if user is logged in AND not the owner
+          if (!isOwner && !isGuest)
+            IconButton(
+              icon: const Icon(Icons.report_outlined),
+              tooltip: 'Report Item',
+              onPressed: () {
+                // Show the dialog we created
+                showDialog(
+                  context: context,
+                  builder: (ctx) => ReportDialog(
+                    reportedItemId: item.id,
+                    reportedUid: item.ownerUid,
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -56,6 +79,57 @@ class ItemDetailPage extends StatelessWidget {
               Expanded(child: Text(item.locationText)),
             ],
           ),
+          const SizedBox(height: 24),
+
+          // Owner info
+          const Divider(),
+          FutureBuilder<UserModel?>(
+            future: AuthService.instance.getUserProfile(item.ownerUid),
+            builder: (context, snapshot) {
+              // show a placholder while loading
+              if (!snapshot.hasData || snapshot.hasError) {
+                return const ListTile(
+                  leading: CircleAvatar(child: Icon(Icons.person)),
+                  title: Text('Posted by...'),
+                  subtitle: Text('Loading user rating...'),
+                );
+              }
+
+              final owner = snapshot.data!;
+
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundImage: (owner.photoURL != null)
+                      ? CachedNetworkImageProvider(owner.photoURL!)
+                      : null,
+                  child: (owner.photoURL == null)
+                      ? const Icon(Icons.person)
+                      : null,
+                ),
+                title: Text('Posted by ${owner.name}'),
+                subtitle: Row(
+                  children: [
+                    const Icon(Icons.star, color: Colors.amber, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${owner.averageRating.toStringAsFixed(1)} (${owner.ratingCount} ${owner.ratingCount == 1 ? "review" : "reviews"})',
+                    ),
+                  ],
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  // Navigate to the owner's profile page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProfilePage(userId: owner.uid),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          const Divider(),
           const SizedBox(height: 24),
 
           // Action area

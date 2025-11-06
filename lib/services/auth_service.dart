@@ -38,10 +38,13 @@ class AuthService {
     if (u != null) await u.getIdToken(true);
   }
 
-  Stream<UserModel?> userStream() {
-    final u = currentUser;
+  Stream<UserModel?> userStream({String? uid}) {
+    // 1. Add optional param
+    // 2. Use the provided uid, or fallback to the current user
+    final u = uid ?? currentUser?.uid;
+
     if (u == null) return Stream.value(null);
-    return _users.doc(u.uid).snapshots().map((doc) {
+    return _users.doc(u).snapshots().map((doc) {
       if (!doc.exists) return null;
       return UserModel.fromDoc(doc);
     });

@@ -6,19 +6,28 @@ import '../services/item_service.dart';
 import 'add_item_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/report_dialog.dart';
+import 'item_detail_page.dart';
 
 class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
+  // 1. Add this to accept a userId
+  final String? userId;
+
+  const ProfilePage({super.key, this.userId});
 
   @override
   Widget build(BuildContext context) {
     final auth = AuthService.instance;
     final itemService = ItemService.instance;
 
+    //2. Check if this is our own profile or someone else's
+    final currentUid = auth.currentUser?.uid;
+    final bool isMyProfile = (userId == null || userId == currentUid);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('My Profile')),
+      appBar: AppBar(title: Text(isMyProfile ? 'My Profile' : 'User Profile')),
       body: StreamBuilder<UserModel?>(
-        stream: auth.userStream(),
+        stream: auth.userStream(uid: userId),
         builder: (context, userSnapshot) {
           if (userSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -35,10 +44,11 @@ class ProfilePage extends StatelessWidget {
               Row(
                 children: [
                   InkWell(
-                    onTap: () => _showImageSourceDialog(context),
+                    onTap: isMyProfile
+                        ? () => _showImageSourceDialog(context)
+                        : null,
                     child: CircleAvatar(
                       radius: 40,
-                      // Show the user;s image if it exists, otherwise show placeholder
                       backgroundImage: (user.photoURL != null)
                           ? CachedNetworkImageProvider(user.photoURL!)
                           : null,
@@ -58,7 +68,6 @@ class ProfilePage extends StatelessWidget {
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         Text(user.email),
-
                         const SizedBox(height: 8),
                         if (user.ratingCount > 0)
                           Row(
@@ -94,16 +103,21 @@ class ProfilePage extends StatelessWidget {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _showEditProfileDialog(context, user.name),
-                  ),
+                  // ONLY show "Edit" button on our own profile
+                  if (isMyProfile)
+                    IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () =>
+                          _showEditProfileDialog(context, user.name),
+                    ),
                 ],
               ),
               const Divider(height: 32),
 
               Text(
-                'My Posts (Report History)',
+                isMyProfile
+                    ? 'My Posts (Report History)'
+                    : "${user.name}'s Posts",
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
@@ -116,16 +130,18 @@ class ProfilePage extends StatelessWidget {
                   }
 
                   if (!itemSnapshot.hasData || itemSnapshot.data!.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text('You have not posted any items yet.'),
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          isMyProfile
+                              ? 'You have not posted any items yet.'
+                              : 'This user has no posts.',
+                        ),
                       ),
                     );
                   }
-
                   final items = itemSnapshot.data!;
-
                   return ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -139,18 +155,34 @@ class ProfilePage extends StatelessWidget {
                             'Status: ${item.status} (${item.type})',
                           ),
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AddItemPage(editing: item),
-                              ),
-                            );
+                            if (isMyProfile) {
+                              // If its my profile, go to edit page
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AddItemPage(editing: item),
+                                ),
+                              );
+                            } else {
+                              // If its someone else's profile, go to the read-only detail page
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ItemDetailPage(item: item),
+                                ),
+                              );
+                            }
                           },
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () =>
-                                _showDeletePostDialog(context, item),
-                          ),
+                          trailing: isMyProfile
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () =>
+                                      _showDeletePostDialog(context, item),
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -159,16 +191,33 @@ class ProfilePage extends StatelessWidget {
               ),
               const Divider(height: 32),
 
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[700],
-                  foregroundColor: Colors.white,
+              if (isMyProfile)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[700],
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    _showLogoutDialog(context);
+                  },
+                  child: const Text('Log Out'),
+                )
+              else
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[700],
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => ReportDialog(
+                        reportedUid: user.uid, // Report the user
+                      ),
+                    );
+                  },
+                  child: const Text('Report User'),
                 ),
-                onPressed: () {
-                  _showLogoutDialog(context);
-                },
-                child: const Text('Log Out'),
-              ),
             ],
           );
         },
