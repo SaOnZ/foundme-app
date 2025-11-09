@@ -3,9 +3,43 @@ import '../services/auth_service.dart';
 import '../services/claim_service.dart';
 import '../models/claim.dart';
 import 'chat_page.dart';
+import '../models/item.dart';
+import '../models/user_model.dart';
+import '../services/item_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ClaimsInboxPage extends StatelessWidget {
   const ClaimsInboxPage({super.key});
+
+  Widget _buildStatusChip(String status) {
+    Color chipColor;
+    String label;
+
+    switch (status) {
+      case 'accepted':
+        chipColor = Colors.green;
+        label = 'Accepted';
+        break;
+      case 'rejected':
+        chipColor = Colors.red;
+        label = 'Rejected';
+        break;
+      case 'closed':
+        chipColor = Colors.grey;
+        label = 'Closed';
+        break;
+      default: // pending
+        chipColor = Colors.orange;
+        label = 'Pending';
+    }
+
+    return Chip(
+      label: Text(label, style: TextStyle(color: chipColor)),
+      backgroundColor: chipColor.withOpacity(0.15),
+      side: BorderSide(color: chipColor.withOpacity(0.3)),
+      padding: EdgeInsets.zero,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,44 +87,90 @@ class ClaimsInboxPage extends StatelessWidget {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final c = claims[i];
-              return ListTile(
-                title: Text(
-                  c.message.isEmpty ? '(no message)' : c.message,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  'Item: ${c.itemId}\nBy: ${c.claimerUid}\nStatus: ${c.status}',
-                ),
-                isThreeLine: true,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Accept',
-                      icon: const Icon(Icons.check_circle_outline),
-                      onPressed: c.status == 'pending'
-                          ? () => ClaimService.instance.setClaimStatus(
-                              c.id,
-                              'accepted',
-                            )
-                          : null,
-                    ),
-                    IconButton(
-                      tooltip: 'Reject',
-                      icon: const Icon(Icons.cancel_outlined),
-                      onPressed: c.status == 'pending'
-                          ? () => ClaimService.instance.setClaimStatus(
-                              c.id,
-                              'rejected',
-                            )
-                          : null,
-                    ),
-                  ],
-                ),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ChatPage(claimId: c.id)),
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                elevation: 2,
+                child: StreamBuilder<ItemModel>(
+                  stream: ItemService.instance.getItemStream(c.itemId),
+                  builder: (context, itemSnap) {
+                    String itemName = 'Loading item...';
+                    String itemPhotoUrl = '';
+                    if (itemSnap.hasData) {
+                      itemName = itemSnap.data!.title;
+                      if (itemSnap.data!.photos.isNotEmpty) {
+                        itemPhotoUrl = itemSnap.data!.photos.first;
+                      }
+                    }
+
+                    return StreamBuilder<UserModel?>(
+                      stream: AuthService.instance.userStream(
+                        uid: c.claimerUid,
+                      ),
+                      builder: (context, userSnap) {
+                        String claimerName = 'Loading user...';
+                        if (userSnap.hasData) {
+                          claimerName = userSnap.data?.name ?? 'Unknow User';
+                        }
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.all(12),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatPage(claimId: c.id),
+                            ),
+                          ),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: CachedNetworkImage(
+                              imageUrl: itemPhotoUrl,
+                              width: 50,
+                              height: 50,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) =>
+                                  const Icon(Icons.image_not_supported),
+                            ),
+                          ),
+                          title: Text(
+                            claimerName,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Item: $itemName'),
+                              const SizedBox(height: 4),
+                              _buildStatusChip(c.status),
+                            ],
+                          ),
+                          isThreeLine: true,
+                          trailing: c.status == 'pending'
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.close_rounded,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () => ClaimService.instance
+                                          .setClaimStatus(c.id, 'rejected'),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.check_rounded,
+                                        color: Colors.green,
+                                      ),
+                                      onPressed: () => ClaimService.instance
+                                          .setClaimStatus(c.id, 'accepted'),
+                                    ),
+                                  ],
+                                )
+                              : null,
+                        );
+                      },
+                    );
+                  },
                 ),
               );
             },

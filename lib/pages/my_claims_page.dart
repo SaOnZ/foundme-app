@@ -4,9 +4,39 @@ import '../services/claim_service.dart';
 import '../models/claim.dart';
 import 'chat_page.dart';
 import '../widgets/rating_dialog.dart';
+import '../models/item.dart';
+import '../services/item_service.dart';
+import '../models/user_model.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class MyClaimsPage extends StatelessWidget {
   const MyClaimsPage({super.key});
+
+  Widget _buildStatusChip(String status) {
+    Color chipColor;
+    String label;
+
+    switch (status) {
+      case 'accepted':
+        chipColor = Colors.green;
+        label = 'Accepted';
+        break;
+      case 'closed':
+        chipColor = Colors.grey;
+        label = 'Closed';
+        break;
+      default:
+        chipColor = Colors.orange;
+        label = 'Pending';
+    }
+
+    return Chip(
+      label: Text(label, style: TextStyle(color: chipColor)),
+      backgroundColor: chipColor.withOpacity(0.15),
+      side: BorderSide(color: chipColor.withOpacity(0.3)),
+      padding: EdgeInsets.zero,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +86,6 @@ class MyClaimsPage extends StatelessWidget {
               final c = claims[i];
 
               Widget? trailingButton;
-
               // Show "Rate" button if the claim is completed and user hasn't reviewed yet
               if (c.status == 'closed' && !c.claimerHasReviewed) {
                 trailingButton = TextButton(
@@ -69,7 +98,6 @@ class MyClaimsPage extends StatelessWidget {
                     final ownerName = owner?.name ?? 'the Owner';
 
                     if (!context.mounted) return;
-
                     // Show the rating dialog
                     showDialog(
                       context: context,
@@ -83,14 +111,60 @@ class MyClaimsPage extends StatelessWidget {
                 );
               }
 
-              return ListTile(
-                title: Text('Item: ${c.itemId}'),
-                subtitle: Text('Status: ${c.status}\n${c.message}'),
-                isThreeLine: true,
-                trailing: trailingButton,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ChatPage(claimId: c.id)),
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                elevation: 2,
+                child: StreamBuilder<ItemModel>(
+                  stream: ItemService.instance.getItemStream(c.itemId),
+                  builder: (context, itemSnap) {
+                    String itemName = 'Loading item...';
+                    String itemPhotoUrl = '';
+                    if (itemSnap.hasData) {
+                      itemName = itemSnap.data!.title;
+                      if (itemSnap.data!.photos.isNotEmpty) {
+                        itemPhotoUrl = itemSnap.data!.photos.first;
+                      }
+                    }
+
+                    return ListTile(
+                      contentPadding: const EdgeInsets.all(12),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: itemPhotoUrl,
+                          width: 59,
+                          height: 50,
+                          fit: BoxFit.cover,
+                          errorWidget: (context, url, error) =>
+                              const Icon(Icons.image_not_supported),
+                        ),
+                      ),
+                      title: Text(
+                        'Item: $itemName',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            c.message,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          _buildStatusChip(c.status),
+                        ],
+                      ),
+                      isThreeLine: true,
+                      trailing: trailingButton,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatPage(claimId: c.id),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               );
             },

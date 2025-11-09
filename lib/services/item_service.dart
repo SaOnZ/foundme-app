@@ -139,4 +139,9 @@ class ItemService {
               .toList(),
         );
   }
+
+  /// Getx a stream for a single item from its ID.
+  Stream<ItemModel> getItemStream(String id) {
+    return _items.doc(id).snapshots().map(ItemModel.fromDoc);
+  }
 }

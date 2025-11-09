@@ -9,6 +9,7 @@ import '../services/notifications_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
 import 'map_view_page.dart';
+import 'claims_page_container.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -49,7 +50,7 @@ class _HomePageState extends State<HomePage> {
     final pages = [
       const FeedPage(),
       const MapViewPage(),
-      const _ClaimsHubPage(),
+      const ClaimsPageContainer(),
       const ProfilePage(),
     ];
     return Scaffold(
@@ -83,7 +84,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _ClaimsHubPage extends StatelessWidget {
+/*class _ClaimsHubPage extends StatelessWidget {
   // ignore: unused_element_parameter
   const _ClaimsHubPage({super.key});
 
@@ -119,4 +120,4 @@ class _ClaimsHubPage extends StatelessWidget {
       ),
     );
   }
-}
+} */
