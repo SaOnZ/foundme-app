@@ -141,6 +141,57 @@ export const submitReview = onCall(async (request) => {
   }
 });
 
+//  NEW FUNCTION: disableUser (Callable Function)
+// 1. Get the caller's ID and the target's ID
+export const disableUser = onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  const { uid: uidToDisable } = request.data;
+
+  // 2. Security check: must be authenticated
+  if (!callerUid) {
+    throw new HttpsError(
+      "unauthenticated",
+      "You must be logged in to perform this action.",
+    );
+  }
+  // 3. Security check: must be an admin
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  if (callerDoc.data()?.role !== "admin") {
+    throw new HttpsError(
+      "permission-denied",
+      "You must be and admin to perform this action.",
+    );
+  }
+
+  // 4. Validation
+  if (!uidToDisable) {
+    throw new HttpsError("invalid-argument", "No 'uid' provided to disable.");
+  }
+  if (callerUid == uidToDisable) {
+    throw new HttpsError("failed-precondition", "admins cannot disable themselves.");
+  }
+
+  try {
+    // 5. Disable the user in Firebase Authentication
+    // This blocks them from logging in.
+    await admin.auth().updateUser(uidToDisable, {
+      disabled: true,
+    });
+
+    // 6. Update their Firestore role
+    // Helps app UI know they are disabled.
+    await db.collection("users").doc(uidToDisable).update({
+      role: "disabled",
+    });
+
+    logger.log('Admin: ${callerUid} successfully disabled user ${uidToDisable}');
+    return { success: true, message: "User has been disabled." };
+  } catch (error) {
+    logger.error('Error disabling user ${uidToDisable}:', error);
+    throw new HttpsError("internal", "An error occured while disabling the user.");
+  }
+})
+
 /**
  * Triggers when a new claim is created.
  * Sends a notification to the ITEM OWNER.

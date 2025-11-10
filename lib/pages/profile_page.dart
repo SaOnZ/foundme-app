@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/report_dialog.dart';
 import 'item_detail_page.dart';
+import 'admin_dashboard_page.dart';
 
 class ProfilePage extends StatelessWidget {
   // 1. Add this to accept a userId
@@ -192,15 +193,36 @@ class ProfilePage extends StatelessWidget {
               const Divider(height: 32),
 
               if (isMyProfile)
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red[700],
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () {
-                    _showLogoutDialog(context);
-                  },
-                  child: const Text('Log Out'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (user.role == 'admin') ...[
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.admin_panel_settings),
+                        label: const Text('Go to Admin Panel'),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AdminDashboardPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[700],
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        _showLogoutDialog(context);
+                      },
+                      child: const Text('Log Out'),
+                    ),
+                  ],
                 )
               else
                 ElevatedButton(

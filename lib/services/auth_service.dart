@@ -21,8 +21,7 @@ class AuthService {
   User? get currentUser => _auth.currentUser;
 
   ///Guest= not signed in OR anonymous sign-in.
-  bool get isGuest =>
-      _auth.currentUser == null || (_auth.currentUser?.isAnonymous ?? false);
+  bool get isGuest => _auth.currentUser?.isAnonymous ?? false;
 
   /// Read custom claims (currently we only need 'admin' : true/false)
   Future<Map<String, bool>> roles() async {
@@ -59,6 +58,13 @@ class AuthService {
     } catch (e) {
       return null;
     }
+  }
+
+  Stream<List<UserModel>> adminGetAllUsers() {
+    return _users
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(UserModel.fromDoc).toList());
   }
 
   /*-------------Auth actions----------------*/

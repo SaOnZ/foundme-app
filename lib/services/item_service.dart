@@ -144,4 +144,22 @@ class ItemService {
   Stream<ItemModel> getItemStream(String id) {
     return _items.doc(id).snapshots().map(ItemModel.fromDoc);
   }
+
+  Stream<List<ItemModel>> adminGetAllItems() {
+    return _items
+        .orderBy('postedAt', descending: true)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map((d) {
+                try {
+                  return ItemModel.fromDoc(d);
+                } catch (_) {
+                  return null;
+                }
+              })
+              .whereType<ItemModel>()
+              .toList(),
+        );
+  }
 }
