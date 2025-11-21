@@ -6,6 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import '../models/item.dart';
 import '../services/item_service.dart';
 import '../widgets/map_picker_page.dart';
+import 'dart:typed_data'; // read image bytes
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AddItemPage extends StatefulWidget {
   //  const AddItemPage({super.key, required ItemModel editing, required ItemModel });
@@ -21,6 +25,7 @@ class _AddItemPageState extends State<AddItemPage> {
   final _title = TextEditingController();
   final _desc = TextEditingController();
   final _tags = TextEditingController();
+  //  final String _apiKey = 'AIzaSyAUUozQIjgMZ5SD82Lvl2s5kNTfsYBhPeY';
 
   String _type = 'lost';
   String _category = 'General';
@@ -55,6 +60,267 @@ class _AddItemPageState extends State<AddItemPage> {
       _lat = it.lat;
       _lng = it.lng;
       _locationText = it.locationText;
+    }
+  }
+
+  /// AI Helper: Generates tags from an image file
+  /*  Future<void> _generateTagsFromImage(XFile file) async {
+    // show a loading indicator so the user knows ai is thinking
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Asking AI to identify this item...')),
+    );
+
+    try {
+      // prepare the brain
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash',
+        apiKey: 'AIzaSyAUUozQIjgMZ5SD82Lvl2s5kNTfsYBhPeY',
+      );
+
+      // prepare the image
+      final Uint8List imageBytes = await file.readAsBytes();
+
+      // ask the prompt
+      // ask specifically for JSON-like format to make it easy to parse
+      final prompt = TextPart(
+        "identify this lost item. "
+        "Return a response with exactly two lines:\n"
+        "Line 1: 5 comma-seperated tags (e.g., Tag1, Tag2, Tag3)\n"
+        "Line 2: A short, helpful description (max 20 words).\n"
+        "Focus on brand , color, and type.",
+      );
+
+      final imagePart = DataPart('image/jpeg', imageBytes);
+
+      // send to google
+      final response = await model.generateContent([
+        Content.multi([prompt, imagePart]),
+      ]);
+
+      final String? output = response.text;
+      print('Gemini Response: $output');
+
+      if (output != null && output.isNotEmpty) {
+        final lines = output.split('\n');
+        String newTags = '';
+        String newDesc = '';
+
+        // parse the lines
+        if (lines.isNotEmpty) newTags = lines[0].trim();
+        if (lines.length > 1) newDesc = lines[1].trim();
+
+        // update the ui
+        setState(() {
+          //update description if it's empty or very short
+          if (_desc.text.length < 5) {
+            _desc.text = newDesc;
+          }
+
+          // merge tags
+          final currentTags = _tags.text;
+          final Set<String> uniqueTags = {};
+          if (currentTags.isNotEmpty)
+            uniqueTags.addAll(currentTags.split(', '));
+          uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
+          _tags.text = uniqueTags.join(', ');
+
+          // auto categorize based on the smart tags
+          final lowerTags = newTags.toLowerCase();
+          if (lowerTags.contains('phone') ||
+              lowerTags.contains('laptop') ||
+              lowerTags.contains('electronics')) {
+            _category = 'Electronics';
+          } else if (lowerTags.contains('card') || lowerTags.contains('id')) {
+            _category = 'Cards';
+          } else if (lowerTags.contains('wallet') ||
+              lowerTags.contains('bag')) {
+            _category = 'Accessories';
+          }
+        });
+
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
+    } catch (e) {
+      print('Gemini Error: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('AI Error: $e')));
+    }
+  }
+*/
+  /* Future<void> _generateTagsFromImage(XFile file) async {
+    // ---------------------------------------------------------
+    // 1. PASTE YOUR KEY BELOW INSIDE THE QUOTES '...'
+    // ---------------------------------------------------------
+    const String myExactKey = 'AIzaSy...PASTE_YOUR_REAL_KEY_HERE';
+
+    // ---------------------------------------------------------
+    // DEBUGGING: This will print to your console
+    // ---------------------------------------------------------
+    print('---------------------------------------------');
+    print('DEBUG CHECK: The key I am using is: "$myExactKey"');
+    print('DEBUG CHECK: The key length is: ${myExactKey.length}');
+    print('---------------------------------------------');
+
+    if (myExactKey.isEmpty || myExactKey.contains('PASTE_YOUR_REAL_KEY')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ERROR: You forgot to paste the API Key in the code!'),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Asking AI to identify this item...')),
+    );
+
+    try {
+      // 2. We use 'myExactKey' directly here
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash',
+        apiKey: myExactKey,
+      );
+
+      final Uint8List imageBytes = await file.readAsBytes();
+
+      final prompt = TextPart(
+        "Identify this lost item. "
+        "Return a response with exactly two lines:\n"
+        "Line 1: 5 comma-separated tags (e.g., Tag1, Tag2, Tag3)\n"
+        "Line 2: A short, helpful description (max 20 words).\n"
+        "Focus on brand, color, and type.",
+      );
+
+      final imagePart = DataPart('image/jpeg', imageBytes);
+
+      final response = await model.generateContent([
+        Content.multi([prompt, imagePart]),
+      ]);
+
+      final String? output = response.text;
+      print('Gemini Response: $output');
+
+      if (output != null && output.isNotEmpty) {
+        final lines = output.split('\n');
+        String newTags = '';
+        String newDesc = '';
+
+        if (lines.isNotEmpty) newTags = lines[0].trim();
+        if (lines.length > 1) newDesc = lines[1].trim();
+
+        setState(() {
+          if (_desc.text.length < 5) {
+            _desc.text = newDesc;
+          }
+
+          final currentTags = _tags.text;
+          final Set<String> uniqueTags = {};
+          if (currentTags.isNotEmpty)
+            uniqueTags.addAll(currentTags.split(', '));
+          uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
+          _tags.text = uniqueTags.join(', ');
+
+          final lowerTags = newTags.toLowerCase();
+          if (lowerTags.contains('phone') ||
+              lowerTags.contains('laptop') ||
+              lowerTags.contains('electronic')) {
+            _category = 'Electronics';
+          } else if (lowerTags.contains('card') || lowerTags.contains('id')) {
+            _category = 'Cards';
+          } else if (lowerTags.contains('wallet') ||
+              lowerTags.contains('bag')) {
+            _category = 'Accessories';
+          }
+        });
+      }
+    } catch (e) {
+      print('Gemini Error: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('AI Error: $e')));
+    }
+  }
+*/
+
+  Future<void> _generateTagsFromImage(XFile file) async {
+    print('!!! STARTING SMART AI SCAN !!!');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Asking AI to fill out your post...')),
+    );
+
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-2.0-flash-lite-001',
+        apiKey: dotenv.env['GEMINI_API_KEY']!,
+      );
+
+      final Uint8List imageBytes = await file.readAsBytes();
+
+      final validCategories = _cats.join(', ');
+
+      final prompt = TextPart(
+        "Analyze this lost item image. \n"
+        "Return a single JSON object with these 4 fields:\n"
+        "1. 'title': A short, clear title (e.g., 'Black Leather Wallet', 'Honda Car Keys').\n"
+        "2. 'description': A helpful description (max 20 words). Focus on color, brand, and distinguishing features.\n"
+        "3. 'category': Pick exactly ONE from this list: [$validCategories]. If unsure, use 'General'.\n"
+        "4. 'tags': A single string of 5 comma-separated keywords.\n\n"
+        "IMPORTANT: Return ONLY raw JSON. Do not use Markdown blocks (```json).",
+      );
+
+      final response = await model.generateContent([
+        Content.multi([prompt, DataPart('image/jpeg', imageBytes)]),
+      ]);
+
+      final String? output = response.text;
+      print('Gemini JSON Response: $output');
+
+      if (output != null && output.isNotEmpty) {
+        final cleanJson = output
+            .replaceAll('```json', '')
+            .replaceAll('```', '')
+            .trim();
+
+        final Map<String, dynamic> data = jsonDecode(cleanJson);
+
+        setState(() {
+          // Auto fill title (only if empty)
+          if (_title.text.isEmpty) {
+            _title.text = data['title'] ?? '';
+          }
+
+          // Auto fill description (only if empty or short)
+          if (_desc.text.length < 5) {
+            _desc.text = data['description'] ?? '';
+          }
+
+          // Auto select category
+          String aiCategory = data['category'] ?? 'General';
+          // Ensure the AI picked a valid category from our list
+          if (_cats.contains(aiCategory)) {
+            _category = aiCategory;
+          } else {
+            _category = 'General'; // Fallback if AI makes up a category
+          }
+
+          // Auto fill Tags
+          String newTags = data['tags'] ?? '';
+          final currentTags = _tags.text;
+          final Set<String> uniqueTags = {};
+          if (currentTags.isNotEmpty) {
+            uniqueTags.addAll(currentTags.split(', '));
+          }
+          uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
+          _tags.text = uniqueTags.join(', ');
+        });
+      }
+    } catch (e) {
+      print('Gemini Error: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('AI Error: $e')));
     }
   }
 
@@ -112,6 +378,8 @@ class _AddItemPageState extends State<AddItemPage> {
           ).showSnackBar(const SnackBar(content: Text('Photo limit reached.')));
         }
       });
+
+      await _generateTagsFromImage(file);
     }
   }
 
@@ -146,6 +414,9 @@ class _AddItemPageState extends State<AddItemPage> {
           );
         }
       });
+      if (files.isNotEmpty) {
+        await _generateTagsFromImage(files.first);
+      }
     }
   }
 

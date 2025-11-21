@@ -50,6 +50,9 @@ dependencies:
   flutter_rating_bar: ^4.0.1
   cached_network_image: ^3.3.1
   cloud_functions: ^6.0.3
+  google_mlkit_image_labeling: ^0.13.0
+  google_generative_ai: ^0.4.0
+  flutter_dotenv: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -72,6 +75,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - .env
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

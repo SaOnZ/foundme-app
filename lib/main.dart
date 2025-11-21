@@ -8,6 +8,7 @@ import 'pages/verify_email_page.dart';
 import 'pages/forgot_password_page.dart';
 import 'pages/home_page.dart';
 import 'services/navigation_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +25,7 @@ void main() async {
     }
   }
 
+  await dotenv.load(fileName: ".env");
   //  await NotificationService.instance.init();
   runApp(const FoundMeApp());
 }
