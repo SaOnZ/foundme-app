@@ -126,12 +126,12 @@ class _ChatPageState extends State<ChatPage> {
                   onPressed: () async {
                     await ClaimService.instance.setClaimStatus(
                       widget.claimId,
-                      'rejected',
+                      'declined',
                     );
                     if (context.mounted) {
                       ScaffoldMessenger.of(
                         context,
-                      ).showSnackBar(const SnackBar(content: Text('Rejected')));
+                      ).showSnackBar(const SnackBar(content: Text('Declined')));
                     }
                   },
                 ),
@@ -266,37 +266,60 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
 
-              // Input
-              SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              if (status == 'declined' ||
+                  status == 'rejected' ||
+                  status == 'closed')
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  color: Colors.grey[200],
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _c,
-                          decoration: const InputDecoration(
-                            hintText: 'Type a message',
-                          ),
-                        ),
-                      ),
+                      const Icon(Icons.lock, color: Colors.grey),
                       const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.send),
-                        onPressed: () async {
-                          final t = _c.text.trim();
-                          if (t.isEmpty) return;
-                          await ClaimService.instance.sendMessage(
-                            widget.claimId,
-                            t,
-                          );
-                          _c.clear();
-                        },
+                      Text(
+                        'This conversation is closed.',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
+                )
+              else
+                // Input
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _c,
+                            decoration: const InputDecoration(
+                              hintText: 'Type a message',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: () async {
+                            final t = _c.text.trim();
+                            if (t.isEmpty) return;
+                            await ClaimService.instance.sendMessage(
+                              widget.claimId,
+                              t,
+                            );
+                            _c.clear();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
         );

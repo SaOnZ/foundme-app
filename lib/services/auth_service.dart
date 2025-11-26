@@ -6,6 +6,7 @@ import 'package:mime/mime.dart'; // For lookupMime Type
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthService {
   AuthService._();
@@ -166,6 +167,46 @@ class AuthService {
     } catch (e) {
       // Handle errors (e.g., log them)
       rethrow; // Rethrow to let the UI handle it
+    }
+  }
+
+  Future<void> saveUserToken() async {
+    print("🔥 DEBUG: Starting saveUserToken()...");
+
+    try {
+      // Get the current user
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        print("❌ DEBUG: User is NOT logged in. Cannot save token.");
+        return;
+      }
+
+      // Try to get the token
+      String? token = await FirebaseMessaging.instance.getToken();
+
+      // Save it to Firestore
+      if (token != null) {
+        print("⚠️ DEBUG: Token was null. Waiting for Firebase to wake up...");
+        await Future.delayed(const Duration(seconds: 3));
+        token = await FirebaseMessaging.instance.getToken();
+      }
+
+      // If it is still null, give up
+      if (token == null) {
+        print("❌ DEBUG: Failed to get Token after retry. Check Internet.");
+        return;
+      }
+
+      print("✅ DEBUG: Got Device Token: $token");
+
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'fcmToken': token,
+        'lastActive': DateTime.now(),
+      }, SetOptions(merge: true));
+
+      print("🚀 DEBUG: SUCCESS! Token written to Firestore.");
+    } catch (e) {
+      print("☠️ DEBUG: CRASH inside saveUserToken: $e");
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'auth_service.dart';
 import '../models/claim.dart';
 import '../models/chat_message.dart';
@@ -92,5 +93,14 @@ class ClaimService {
     batch.update(db.collection('claims').doc(claimId), {'status': 'closed'});
     batch.update(db.collection('items').doc(itemId), {'status': 'closed'});
     await batch.commit();
+  }
+
+  Stream<QuerySnapshot> streamUserClaimForItem(String itemId, String userId) {
+    return FirebaseFirestore.instance
+        .collection('claims')
+        .where('itemId', isEqualTo: itemId)
+        .where('claimerUid', isEqualTo: userId)
+        .limit(1)
+        .snapshots();
   }
 }

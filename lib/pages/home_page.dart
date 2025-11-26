@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-// import '../services/auth_service.dart';
+import '../services/auth_service.dart';
 import 'feed_page.dart';
 import 'add_item_page.dart';
 import 'claims_inbox_page.dart';
 import 'my_claims_page.dart';
 import 'profile_page.dart';
-import '../services/notifications_service.dart';
+import '../services/notification_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:async';
 import 'map_view_page.dart';
@@ -25,6 +25,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     NotificationService.instance.init();
+    AuthService.instance.saveUserToken();
 
     _messageSubscription = NotificationService.instance.foregroundMessages
         .listen((RemoteMessage message) {
@@ -37,6 +38,10 @@ class _HomePageState extends State<HomePage> {
             );
           }
         });
+
+    FirebaseMessaging.instance.getToken().then((token) {
+      print("MY_TEXT_TOKEN: $token");
+    });
   }
 
   @override

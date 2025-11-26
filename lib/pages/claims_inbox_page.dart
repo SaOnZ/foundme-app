@@ -20,9 +20,9 @@ class ClaimsInboxPage extends StatelessWidget {
         chipColor = Colors.green;
         label = 'Accepted';
         break;
-      case 'rejected':
+      case 'declined':
         chipColor = Colors.red;
-        label = 'Rejected';
+        label = 'Declined';
         break;
       case 'closed':
         chipColor = Colors.grey;
@@ -154,7 +154,7 @@ class ClaimsInboxPage extends StatelessWidget {
                                         color: Colors.red,
                                       ),
                                       onPressed: () => ClaimService.instance
-                                          .setClaimStatus(c.id, 'rejected'),
+                                          .setClaimStatus(c.id, 'declined'),
                                     ),
                                     IconButton(
                                       icon: const Icon(

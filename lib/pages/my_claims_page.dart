@@ -21,9 +21,9 @@ class MyClaimsPage extends StatelessWidget {
         chipColor = Colors.green;
         label = 'Accepted';
         break;
-      case 'closed':
-        chipColor = Colors.grey;
-        label = 'Closed';
+      case 'declined':
+        chipColor = Colors.red;
+        label = 'Declined';
         break;
       default:
         chipColor = Colors.orange;
