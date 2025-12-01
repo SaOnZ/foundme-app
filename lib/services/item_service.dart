@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -161,5 +162,32 @@ class ItemService {
               .whereType<ItemModel>()
               .toList(),
         );
+  }
+
+  Future<List<ItemModel>> getMatchingCandidates({
+    required String currentType,
+    required String category,
+  }) async {
+    try {
+      // If i lost something, I am looking for 'found' items and vice versa
+      final targetType = currentType == 'lost' ? 'found' : 'lost';
+
+      final snapshot = await FirebaseFirestore
+          .instance // or FirebaseFirestore.instance
+          .collection('items')
+          .where('type', isEqualTo: targetType)
+          .where('category', isEqualTo: category)
+          .where('status', isEqualTo: 'active') // Only match active items
+          .orderBy('postedAt', descending: true) // Newest first
+          .limit(20) // Limit to 20 to save AI tokens
+          .get();
+
+      return snapshot.docs.map((doc) {
+        return ItemModel.fromDoc(doc);
+      }).toList();
+    } catch (e) {
+      print('Error fetching matches: $e');
+      return [];
+    }
   }
 }

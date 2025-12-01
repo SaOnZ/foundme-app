@@ -10,6 +10,9 @@ import 'dart:typed_data'; // read image bytes
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../services/ai_matching_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'item_detail_page.dart';
 
 class AddItemPage extends StatefulWidget {
   //  const AddItemPage({super.key, required ItemModel editing, required ItemModel });
@@ -44,6 +47,9 @@ class _AddItemPageState extends State<AddItemPage> {
     'Clothing',
     'Accessories',
     'Cards',
+    'Documents',
+    'Keys',
+    'Bags',
     'Others',
   ];
 
@@ -61,6 +67,14 @@ class _AddItemPageState extends State<AddItemPage> {
       _lng = it.lng;
       _locationText = it.locationText;
     }
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _desc.dispose();
+    _tags.dispose();
+    super.dispose();
   }
 
   /// AI Helper: Generates tags from an image file
@@ -436,12 +450,7 @@ class _AddItemPageState extends State<AddItemPage> {
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
-    //  if (_photos.isEmpty) {
-    //    ScaffoldMessenger.of(context).showSnackBar(
-    //      const SnackBar(content: Text('Please add at least one photo')),
-    //    );
-    //    return;
-    //  }
+
     if (_lat == null || _lng == null) {
       ScaffoldMessenger.of(
         context,
@@ -459,6 +468,7 @@ class _AddItemPageState extends State<AddItemPage> {
     }
 
     setState(() => _saving = true);
+
     try {
       final tagList = _tags.text
           .split(',')
@@ -479,11 +489,61 @@ class _AddItemPageState extends State<AddItemPage> {
           locationText: _locationText,
           photos: _photos,
         );
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Item posted')));
-        //      Navigator.pop(context);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Post saved! AI is checking for matches... 🔍'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          // A. Get Candidates
+          final candidates = await ItemService.instance.getMatchingCandidates(
+            currentType: _type,
+            category: _category,
+          );
+
+          print(
+            "🔍 DEBUG: Found ${candidates.length} candidates in the database.",
+          );
+
+          if (candidates.isNotEmpty) {
+            Uint8List imageBytes = Uint8List(0);
+            if (_photos.isNotEmpty) {
+              imageBytes = await _photos.first.readAsBytes();
+            }
+            final tempItem = ItemModel(
+              id: 'temp',
+              type: _type,
+              title: _title.text,
+              desc: _desc.text,
+              category: _category,
+              tags: tagList,
+              ownerUid: '',
+              postedAt: Timestamp.now(),
+              locationText: '',
+              photos: [],
+              lat: 0,
+              lng: 0,
+              status: '', // Provide an appropriate status value here
+            );
+
+            // B. Call AI
+            final matches = await AiMatchingService.instance.findMatches(
+              newItem: tempItem,
+              imageBytes: imageBytes,
+              candidates: candidates,
+            );
+
+            if (matches.isNotEmpty && mounted) {
+              _showMatchDialog(matches, candidates);
+              // Don't pop yet if we are showing dialog
+              setState(() => _saving = false);
+              return;
+            }
+          }
+        }
       } else {
         // UPDATE (keep existing photos in this simple edit mode)
         await ItemService.instance.updateItem(widget.editing!.id, {
@@ -511,16 +571,78 @@ class _AddItemPageState extends State<AddItemPage> {
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
-      setState(() => _saving = false);
+      if (mounted) setState(() => _saving = false);
     }
   }
 
-  @override
-  void dispose() {
-    _title.dispose();
-    _desc.dispose();
-    _tags.dispose();
-    super.dispose();
+  void _showMatchDialog(
+    List<Map<String, dynamic>> matches,
+    List<ItemModel> allCandidates,
+  ) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('🎉 Possible Matches Found!'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 300,
+          child: ListView.builder(
+            itemCount: matches.length,
+            itemBuilder: (ctx, i) {
+              final match = matches[i];
+              // Find the full item object
+              final fullItem = allCandidates.firstWhere(
+                (c) => c.id == match['id'],
+                orElse: () => allCandidates.first, // Safety fallback
+              );
+
+              return Card(
+                color: Colors.green[50],
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green,
+                    child: Text(
+                      '${match['score']}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    fullItem.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(match['reason'] ?? 'Visual match detected.'),
+                  onTap: () {
+                    // Optional: Navigate to detail page
+                    Navigator.pop(ctx); // Close dialog
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ItemDetailPage(item: fullItem),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Close dialog
+              Navigator.pop(context); // Close Add Page
+            },
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
   }
 
   String? _vTitle(String? v) =>
