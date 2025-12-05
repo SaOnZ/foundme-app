@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
   AuthService._();
@@ -254,5 +255,68 @@ class AuthService {
     }, SetOptions(merge: true));
 
     await user.sendEmailVerification();
+  }
+
+  // --- GOOGLE SIGN IN LOGIC ---
+  Future<User?> signInWithGoogle() async {
+    try {
+      // Trigger the google Authentication flow
+      final GoogleSignIn googleSignIn =
+          GoogleSignIn(); // Ensure this is imported
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        return null;
+      }
+
+      // Obtain the auth details from the request
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      // Create a new credential
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with the credential
+      final UserCredential userCredential = await _auth.signInWithCredential(
+        credential,
+      );
+
+      final User? user = userCredential.user;
+
+      // Save User to Firestore (if new)
+      if (user != null) {
+        // Check if user doc exists
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (!userDoc.exists) {
+          // Create new user profile
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({
+                'uid': user.uid,
+                'email': user.email,
+                'name': user.displayName ?? 'Google User',
+                'role': 'user',
+                'createdAt': FieldValue.serverTimestamp(),
+                'photoURL': user.photoURL,
+                'ratingCount': 0,
+                'averageRating': 0.0,
+                'fcmTokens': [],
+              });
+        }
+      }
+
+      return user;
+    } catch (e) {
+      print("Error signing in with Google: $e");
+      return null;
+    }
   }
 }

@@ -619,7 +619,7 @@ class _AddItemPageState extends State<AddItemPage> {
                   subtitle: Text(match['reason'] ?? 'Visual match detected.'),
                   onTap: () {
                     // Optional: Navigate to detail page
-                    Navigator.pop(ctx); // Close dialog
+                    //Navigator.pop(ctx); // Close dialog
                     Navigator.push(
                       context,
                       MaterialPageRoute(

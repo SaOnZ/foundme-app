@@ -126,7 +126,66 @@ class _LoginPageState extends State<LoginPage> {
                     child: const Text('Forgot Password?'),
                   ),
 
-                  const Divider(height: 32),
+                  // ===========================================================
+                  // ↓↓↓↓↓ START OF NEW GOOGLE SIGN-IN SECTION ↓↓↓↓↓
+                  // ===========================================================
+                  const SizedBox(height: 10),
+                  const Row(
+                    children: [
+                      Expanded(child: Divider()),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Text("OR", style: TextStyle(color: Colors.grey)),
+                      ),
+                      Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: Image.network(
+                        'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
+                        height: 24,
+                        errorBuilder: (ctx, _, __) => const Icon(Icons.public),
+                      ),
+                      label: const Text('Sign in with Google'),
+                      onPressed: _loading
+                          ? null
+                          : () async {
+                              setState(() => _loading = true);
+
+                              final user = await AuthService.instance
+                                  .signInWithGoogle();
+
+                              setState(() => _loading = false);
+
+                              if (user != null) {
+                                // AuthGate handles navigation automatically,
+                                // but we can pop here just in case or show success
+                                if (mounted) {
+                                  // No explicit navigation needed if using AuthGate stream
+                                }
+                              } else {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Google Sign-In canceled or failed',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                    ),
+                  ),
+
+                  // ===========================================================
+                  // ↑↑↑↑↑ END OF NEW GOOGLE SIGN-IN SECTION ↑↑↑↑↑
+                  // ===========================================================
+                  const SizedBox(height: 24),
 
                   // Create account
                   SizedBox(
