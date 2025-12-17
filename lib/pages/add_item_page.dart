@@ -28,7 +28,7 @@ class _AddItemPageState extends State<AddItemPage> {
   final _title = TextEditingController();
   final _desc = TextEditingController();
   final _tags = TextEditingController();
-  //  final String _apiKey = 'AIzaSyAUUozQIjgMZ5SD82Lvl2s5kNTfsYBhPeY';
+  final _locationController = TextEditingController();
 
   String _type = 'lost';
   String _category = 'General';
@@ -66,6 +66,7 @@ class _AddItemPageState extends State<AddItemPage> {
       _lat = it.lat;
       _lng = it.lng;
       _locationText = it.locationText;
+      _locationController.text = it.locationText;
     }
   }
 
@@ -78,184 +79,6 @@ class _AddItemPageState extends State<AddItemPage> {
   }
 
   /// AI Helper: Generates tags from an image file
-  /*  Future<void> _generateTagsFromImage(XFile file) async {
-    // show a loading indicator so the user knows ai is thinking
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Asking AI to identify this item...')),
-    );
-
-    try {
-      // prepare the brain
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: 'AIzaSyAUUozQIjgMZ5SD82Lvl2s5kNTfsYBhPeY',
-      );
-
-      // prepare the image
-      final Uint8List imageBytes = await file.readAsBytes();
-
-      // ask the prompt
-      // ask specifically for JSON-like format to make it easy to parse
-      final prompt = TextPart(
-        "identify this lost item. "
-        "Return a response with exactly two lines:\n"
-        "Line 1: 5 comma-seperated tags (e.g., Tag1, Tag2, Tag3)\n"
-        "Line 2: A short, helpful description (max 20 words).\n"
-        "Focus on brand , color, and type.",
-      );
-
-      final imagePart = DataPart('image/jpeg', imageBytes);
-
-      // send to google
-      final response = await model.generateContent([
-        Content.multi([prompt, imagePart]),
-      ]);
-
-      final String? output = response.text;
-      print('Gemini Response: $output');
-
-      if (output != null && output.isNotEmpty) {
-        final lines = output.split('\n');
-        String newTags = '';
-        String newDesc = '';
-
-        // parse the lines
-        if (lines.isNotEmpty) newTags = lines[0].trim();
-        if (lines.length > 1) newDesc = lines[1].trim();
-
-        // update the ui
-        setState(() {
-          //update description if it's empty or very short
-          if (_desc.text.length < 5) {
-            _desc.text = newDesc;
-          }
-
-          // merge tags
-          final currentTags = _tags.text;
-          final Set<String> uniqueTags = {};
-          if (currentTags.isNotEmpty)
-            uniqueTags.addAll(currentTags.split(', '));
-          uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
-          _tags.text = uniqueTags.join(', ');
-
-          // auto categorize based on the smart tags
-          final lowerTags = newTags.toLowerCase();
-          if (lowerTags.contains('phone') ||
-              lowerTags.contains('laptop') ||
-              lowerTags.contains('electronics')) {
-            _category = 'Electronics';
-          } else if (lowerTags.contains('card') || lowerTags.contains('id')) {
-            _category = 'Cards';
-          } else if (lowerTags.contains('wallet') ||
-              lowerTags.contains('bag')) {
-            _category = 'Accessories';
-          }
-        });
-
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      }
-    } catch (e) {
-      print('Gemini Error: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('AI Error: $e')));
-    }
-  }
-*/
-  /* Future<void> _generateTagsFromImage(XFile file) async {
-    // ---------------------------------------------------------
-    // 1. PASTE YOUR KEY BELOW INSIDE THE QUOTES '...'
-    // ---------------------------------------------------------
-    const String myExactKey = 'AIzaSy...PASTE_YOUR_REAL_KEY_HERE';
-
-    // ---------------------------------------------------------
-    // DEBUGGING: This will print to your console
-    // ---------------------------------------------------------
-    print('---------------------------------------------');
-    print('DEBUG CHECK: The key I am using is: "$myExactKey"');
-    print('DEBUG CHECK: The key length is: ${myExactKey.length}');
-    print('---------------------------------------------');
-
-    if (myExactKey.isEmpty || myExactKey.contains('PASTE_YOUR_REAL_KEY')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ERROR: You forgot to paste the API Key in the code!'),
-        ),
-      );
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Asking AI to identify this item...')),
-    );
-
-    try {
-      // 2. We use 'myExactKey' directly here
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: myExactKey,
-      );
-
-      final Uint8List imageBytes = await file.readAsBytes();
-
-      final prompt = TextPart(
-        "Identify this lost item. "
-        "Return a response with exactly two lines:\n"
-        "Line 1: 5 comma-separated tags (e.g., Tag1, Tag2, Tag3)\n"
-        "Line 2: A short, helpful description (max 20 words).\n"
-        "Focus on brand, color, and type.",
-      );
-
-      final imagePart = DataPart('image/jpeg', imageBytes);
-
-      final response = await model.generateContent([
-        Content.multi([prompt, imagePart]),
-      ]);
-
-      final String? output = response.text;
-      print('Gemini Response: $output');
-
-      if (output != null && output.isNotEmpty) {
-        final lines = output.split('\n');
-        String newTags = '';
-        String newDesc = '';
-
-        if (lines.isNotEmpty) newTags = lines[0].trim();
-        if (lines.length > 1) newDesc = lines[1].trim();
-
-        setState(() {
-          if (_desc.text.length < 5) {
-            _desc.text = newDesc;
-          }
-
-          final currentTags = _tags.text;
-          final Set<String> uniqueTags = {};
-          if (currentTags.isNotEmpty)
-            uniqueTags.addAll(currentTags.split(', '));
-          uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
-          _tags.text = uniqueTags.join(', ');
-
-          final lowerTags = newTags.toLowerCase();
-          if (lowerTags.contains('phone') ||
-              lowerTags.contains('laptop') ||
-              lowerTags.contains('electronic')) {
-            _category = 'Electronics';
-          } else if (lowerTags.contains('card') || lowerTags.contains('id')) {
-            _category = 'Cards';
-          } else if (lowerTags.contains('wallet') ||
-              lowerTags.contains('bag')) {
-            _category = 'Accessories';
-          }
-        });
-      }
-    } catch (e) {
-      print('Gemini Error: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('AI Error: $e')));
-    }
-  }
-*/
 
   Future<void> _generateTagsFromImage(XFile file) async {
     print('!!! STARTING SMART AI SCAN !!!');
@@ -444,6 +267,7 @@ class _AddItemPageState extends State<AddItemPage> {
         _lat = res['lat'];
         _lng = res['lng'];
         _locationText = res['text'] ?? '';
+        _locationController.text = res['text'] ?? '';
       });
     }
   }
@@ -486,15 +310,18 @@ class _AddItemPageState extends State<AddItemPage> {
           tags: tagList,
           lat: _lat!,
           lng: _lng!,
-          locationText: _locationText,
+          //          locationText: _locationText,
+          locationText: _locationController.text,
           photos: _photos,
         );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Post saved! AI is checking for matches... 🔍'),
-              duration: Duration(seconds: 2),
+              content: Text(
+                'Post submitted for Admin Approval. It will appear after review.',
+              ),
+              duration: Duration(seconds: 3),
             ),
           );
 
@@ -760,7 +587,7 @@ class _AddItemPageState extends State<AddItemPage> {
 
               const SizedBox(height: 12),
 
-              ListTile(
+              /*              ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   _locationText.isEmpty ? 'Pick location' : _locationText,
@@ -770,6 +597,44 @@ class _AddItemPageState extends State<AddItemPage> {
                   onPressed: _pickLocation,
                   child: const Text('map'),
                 ),
+              ), */
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _locationController,
+                      decoration: const InputDecoration(
+                        labelText: 'Location',
+                        hintText: 'e.g. Library Level 2',
+                        prefixIcon: Icon(Icons.place_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                      // Simple validation to ensure they didn't leave it blank
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Plesae pick or type a location'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // The Map Button
+                  Container(
+                    height: 56,
+                    margin: const EdgeInsets.only(top: 0),
+                    child: ElevatedButton(
+                      onPressed: _pickLocation,
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      child: const Icon(Icons.map),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
 

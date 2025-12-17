@@ -4,6 +4,7 @@ import '../services/item_service.dart';
 import '../models/item.dart';
 import 'item_detail_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/feed_item_card.dart';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({super.key});
@@ -137,56 +138,21 @@ class _FeedPageState extends State<FeedPage>
                 }
 
                 return ListView.separated(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   itemCount: items.length,
                   // ignore: unnecessary_underscores
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, __) => const SizedBox(height: 0),
                   itemBuilder: (_, i) {
                     final it = items[i];
-                    final img = it.photos.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: it.photos.first,
-                            height: 88,
-                            width: 88,
-                            fit: BoxFit.cover,
-                            // Show a loading spinner
-                            placeholder: (context, url) => Container(
-                              height: 88,
-                              width: 88,
-                              color: Colors.grey[200],
-                              child: const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
-                            // Show and error icon if it fails
-                            errorWidget: (context, url, error) => Container(
-                              height: 88,
-                              width: 88,
-                              color: Colors.grey[200],
-                              child: const Icon(Icons.error, color: Colors.red),
-                            ),
-                          )
-                        : const SizedBox(width: 88, height: 88);
-
-                    return ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: img,
-                      ),
-                      title: Text(
-                        it.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        '${it.type.toUpperCase()} • ${it.category}\n${it.locationText}',
-                        maxLines: 2,
-                      ),
-                      isThreeLine: true,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ItemDetailPage(item: it),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: FeedItemCard(
+                        item: it,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ItemDetailPage(item: it),
+                          ),
                         ),
                       ),
                     );
@@ -198,5 +164,25 @@ class _FeedPageState extends State<FeedPage>
         ],
       ),
     );
+  }
+
+  // Helper: Convert Timestamp to "time Ago" string
+  String _timeAgo(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()}y ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()}mo ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 }

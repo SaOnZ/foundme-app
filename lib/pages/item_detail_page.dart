@@ -73,7 +73,27 @@ class ItemDetailPage extends StatelessWidget {
           // Title + basic info
           Text(item.title, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 4),
-          Text('${item.type.toUpperCase()} • ${item.category}'),
+          //Text('${item.type.toUpperCase()} • ${item.category}'),
+          Row(
+            children: [
+              Text(
+                '${item.type.toUpperCase()} • ${item.category}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor,
+                ),
+              ),
+              const Spacer(), //Pushes the data to the right edge
+              Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Text(
+                item.postedAt != null
+                    ? _timeAgo(item.postedAt!.toDate())
+                    : 'Unknown date',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           Text(item.desc),
           const SizedBox(height: 8),
@@ -423,5 +443,25 @@ class _InitialMessageDialogState extends State<_InitialMessageDialog> {
         ),
       ],
     );
+  }
+}
+
+// Helper: Convert Timestamp to "Time Ago" string
+String _timeAgo(DateTime date) {
+  final now = DateTime.now();
+  final difference = now.difference(date);
+
+  if (difference.inDays > 365) {
+    return '${(difference.inDays / 365).floor()}y ago';
+  } else if (difference.inDays > 30) {
+    return '${(difference.inDays / 30).floor()}mo ago';
+  } else if (difference.inDays > 0) {
+    return '${difference.inDays}d ago';
+  } else if (difference.inHours > 0) {
+    return '${difference.inHours}h ago';
+  } else if (difference.inMinutes > 0) {
+    return '${difference.inMinutes}m ago';
+  } else {
+    return 'Just now';
   }
 }

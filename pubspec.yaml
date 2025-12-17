@@ -55,6 +55,9 @@ dependencies:
   flutter_dotenv: ^6.0.0
   googleapis_auth: ^2.0.0
   google_sign_in: ^6.2.1
+  fl_chart: ^1.1.1
+  intl: ^0.20.2
+  timeago: ^3.7.1
 
 dev_dependencies:
   flutter_test:

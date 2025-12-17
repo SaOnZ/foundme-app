@@ -7,6 +7,7 @@ class UserModel {
   final String role;
   final Timestamp createdAt;
   final String? photoURL;
+  final bool isDisabled;
 
   final double averageRating;
   final int ratingCount;
@@ -18,6 +19,7 @@ class UserModel {
     required this.role,
     required this.createdAt,
     this.photoURL,
+    required this.isDisabled,
 
     required this.averageRating,
     required this.ratingCount,
@@ -37,6 +39,7 @@ class UserModel {
       role: data['role'] ?? 'user',
       createdAt: data['createdAt'] ?? Timestamp.now(),
       photoURL: data['photoURL'],
+      isDisabled: data['disabled'] ?? false,
 
       averageRating: _asDouble(data['averageRating']),
       ratingCount: _asInt(data['ratingCount']),

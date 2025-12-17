@@ -10,6 +10,8 @@ import 'pages/home_page.dart';
 import 'services/navigation_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/notification_service.dart';
+import "package:cloud_firestore/cloud_firestore.dart";
+import 'pages/matric_verification_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -77,18 +79,49 @@ class AuthGate extends StatelessWidget {
       stream: AuthService.instance.authState(),
       builder: (context, snapshot) {
         final user = AuthService.instance.currentUser;
+
+        // Loading
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
+        // Not Logged in
         if (user == null) {
           return const LoginPage();
         }
-        if (user.emailVerified) {
-          return const HomePage();
-        }
-        return const VerifyEmailPage();
+
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .snapshots(),
+          builder: (context, userSnap) {
+            // While fetching user data, show loading
+            if (!userSnap.hasData) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final userData = userSnap.data!.data() as Map<String, dynamic>?;
+
+            final role = userData?['role'] ?? 'user';
+            // Check the 'isVerified' flag
+            final isVerified = userData?['isVerified'] ?? false;
+
+            if (role == 'admin') {
+              return const HomePage();
+            }
+
+            // For normal users, check Matric Verification
+            if (!isVerified) {
+              return const MatricVerificationPage();
+            }
+
+            return const HomePage();
+          },
+        );
       },
     );
   }
