@@ -29,6 +29,15 @@ class _LoginPageState extends State<LoginPage> {
       (v == null || v.length < 8) ? 'Min 8 characters' : null;
 
   Future<void> _submit() async {
+    if (_email.text.isEmpty || _pass.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pease fill out all fields!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (!_form.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
@@ -77,23 +86,52 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  const Icon(
+                    Icons.location_on_rounded,
+                    size: 64,
+                    color: Colors.blue,
+                  ),
+                  const SizedBox(height: 16),
                   const Text(
                     'FoundMe',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
+                  const Text(
+                    'Find what matters.',
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
                   ),
                   const SizedBox(height: 24),
 
                   TextFormField(
                     controller: _email,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    validator: _emailV,
+                    textInputAction: TextInputAction.next,
                     keyboardType: TextInputType.emailAddress,
+                    validator: _emailV,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _pass,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => _submit(),
+                    obscureText: _obscure,
+                    validator: _passV,
                     decoration: InputDecoration(
                       labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscure ? Icons.visibility : Icons.visibility_off,
@@ -101,50 +139,61 @@ class _LoginPageState extends State<LoginPage> {
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
-                    obscureText: _obscure,
-                    validator: _passV,
                   ),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/forgot'),
+                      child: const Text('Forgot Password?'),
+                    ),
+                  ),
+
                   const SizedBox(height: 20),
 
                   // Login button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 2,
+                      ),
                       onPressed: _loading ? null : _submit,
                       child: _loading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(),
-                            )
-                          : const Text('Login'),
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('Login', style: TextStyle(fontSize: 16)),
                     ),
                   ),
 
-                  TextButton(
-                    onPressed: () => Navigator.pushNamed(context, '/forgot'),
-                    child: const Text('Forgot Password?'),
-                  ),
+                  const SizedBox(height: 24),
 
-                  // ===========================================================
-                  // ↓↓↓↓↓ START OF NEW GOOGLE SIGN-IN SECTION ↓↓↓↓↓
-                  // ===========================================================
-                  const SizedBox(height: 10),
                   const Row(
                     children: [
                       Expanded(child: Divider()),
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text("OR", style: TextStyle(color: Colors.grey)),
+                        child: Text("OR"),
                       ),
                       Expanded(child: Divider()),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
+                  // ===========================================================
+                  // ↓↓↓↓↓ UPGRADE: GOOGLE & GUEST (Secondary Actions) ↓↓↓↓↓
+                  // ===========================================================
                   SizedBox(
                     width: double.infinity,
+                    height: 50,
                     child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                       icon: Image.network(
                         'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
                         height: 24,
@@ -181,31 +230,34 @@ class _LoginPageState extends State<LoginPage> {
                             },
                     ),
                   ),
+                  const SizedBox(height: 12),
 
-                  // ===========================================================
-                  // ↑↑↑↑↑ END OF NEW GOOGLE SIGN-IN SECTION ↑↑↑↑↑
-                  // ===========================================================
-                  const SizedBox(height: 24),
-
-                  // Create account
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/register'),
-                      child: const Text('Create an Account'),
+                  TextButton(
+                    onPressed: _loading ? null : _continueAsGuest,
+                    child: const Text(
+                      'Continue as Guest',
+                      style: TextStyle(color: Colors.grey),
                     ),
                   ),
 
-                  const SizedBox(height: 12),
-
-                  // continue as guest
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: _loading ? null : _continueAsGuest,
-                      child: const Text('Continue as Guest'),
-                    ),
+                  // ===========================================================
+                  //     UPGRADE: SIGN UP (Moved to bottom)
+                  // ===========================================================
+                  // Create account
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("Don't have an account?"),
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/register'),
+                        child: const Text(
+                          'Sign Up',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
