@@ -28,18 +28,44 @@ class _LoginPageState extends State<LoginPage> {
   String? _passV(String? v) =>
       (v == null || v.length < 8) ? 'Min 8 characters' : null;
 
-  Future<void> _submit() async {
-    if (_email.text.isEmpty || _pass.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pease fill out all fields!'),
-          backgroundColor: Colors.red,
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        elevation: 10,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 10),
+            Text("Attention"),
+          ],
         ),
-      );
+        content: Text(message, style: const TextStyle(fontSize: 16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              "OK",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    // 1. Check for empty fields FIRST
+    if (_email.text.isEmpty || _pass.text.isEmpty) {
+      _showErrorDialog("Please fill out all fields!");
       return;
     }
+
+    // 2. Standard validation
     if (!_form.currentState!.validate()) return;
     setState(() => _loading = true);
+
     try {
       await AuthService.instance.login(
         email: _email.text,
@@ -47,10 +73,21 @@ class _LoginPageState extends State<LoginPage> {
       );
       if (mounted) Navigator.pushReplacementNamed(context, '/');
     } catch (e) {
+      // 3. Handle Firebase errors nicely
+      String errorMessage = "An unexpected error occurred.";
+
+      if (e.toString().contains('user-not-found')) {
+        errorMessage = "We couldn't find an account with that email.";
+      } else if (e.toString().contains('wrong-password')) {
+        errorMessage = "The password you entered is incorrect.";
+      } else if (e.toString().contains('invalid-email')) {
+        errorMessage = "That email address doesn't look right.";
+      } else {
+        errorMessage = "Invalid credentials. Please check your details.";
+      }
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
+        _showErrorDialog(errorMessage);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -64,9 +101,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Guest sign-infailed: $e')));
+        _showErrorDialog("Guest sign-infailed: $e");
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -88,10 +123,10 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const Icon(
                     Icons.location_on_rounded,
-                    size: 64,
+                    size: 60,
                     color: Colors.blue,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   const Text(
                     'FoundMe',
                     style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
@@ -100,7 +135,7 @@ class _LoginPageState extends State<LoginPage> {
                     'Find what matters.',
                     style: TextStyle(color: Colors.grey, fontSize: 16),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 30),
 
                   TextFormField(
                     controller: _email,
@@ -117,7 +152,8 @@ class _LoginPageState extends State<LoginPage> {
                       fillColor: Colors.grey.shade50,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+
                   TextFormField(
                     controller: _pass,
                     textInputAction: TextInputAction.done,
@@ -154,6 +190,7 @@ class _LoginPageState extends State<LoginPage> {
                   // Login button
                   SizedBox(
                     width: double.infinity,
+                    height: 50,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
@@ -239,12 +276,10 @@ class _LoginPageState extends State<LoginPage> {
                       style: TextStyle(color: Colors.grey),
                     ),
                   ),
-
+                  const SizedBox(height: 20),
                   // ===========================================================
                   //     UPGRADE: SIGN UP (Moved to bottom)
                   // ===========================================================
-                  // Create account
-                  const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
