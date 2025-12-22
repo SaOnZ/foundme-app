@@ -17,6 +17,75 @@ class ItemDetailPage extends StatelessWidget {
   final ItemModel item;
   const ItemDetailPage({super.key, required this.item});
 
+  // 1. Function to Delete Item
+  Future<void> _deleteItem(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Post?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance
+          .collection('items')
+          .doc(item.id)
+          .delete();
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Post deleted.')));
+        Navigator.pop(context); // Go back to Home
+      }
+    }
+  }
+
+  // 2. Function to Mark as Resolved
+  Future<void> _markResolved(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Mark as Resolved?'),
+        content: const Text(
+          'This means you found the item. The post will be closed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm', style: TextStyle(color: Colors.green)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance.collection('items').doc(item.id).update({
+        'status': 'resolved',
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Item marked as resolved!')),
+        );
+        Navigator.pop(context);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = AuthService.instance.currentUser;
@@ -159,13 +228,63 @@ class ItemDetailPage extends StatelessWidget {
 
           // Action area
           if (isOwner)
-            const Center(
-              child: Text(
-                'You posted this item.',
-                style: TextStyle(
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey,
-                ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Column(
+                children: [
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.manage_accounts, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text(
+                        "Owner Controls",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      // DELETE BUTTON
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                          ),
+                          onPressed: () => _deleteItem(context),
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text("Delete"),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // RESOLVE BUTTON (Only show if active)
+                      if (item.status != 'resolved')
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => _markResolved(context),
+                            icon: const Icon(Icons.check_circle_outline),
+                            label: const Text("Resolve"),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
             )
           else if (item.status != 'active')
