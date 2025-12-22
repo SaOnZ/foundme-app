@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../widgets/rate_user_sheet.dart';
 
 class ItemDetailPage extends StatelessWidget {
   final ItemModel item;
@@ -79,11 +80,27 @@ class ItemDetailPage extends StatelessWidget {
       });
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Item marked as resolved!')),
+          const SnackBar(
+            content: Text('Item marked as resolved! Please rate the user.'),
+          ),
         );
-        Navigator.pop(context);
+        //Navigator.pop(context);
+        _showRatingSheet(context);
       }
     }
+  }
+
+  void _showRatingSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => RateUserSheet(
+        targetUserName: "the User",
+        claimId: item.id,
+        roleToReview: "claimer",
+      ),
+    );
   }
 
   @override
