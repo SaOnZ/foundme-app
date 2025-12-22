@@ -12,6 +12,8 @@ class UserModel {
   final double averageRating;
   final int ratingCount;
 
+  final bool isVerified;
+
   UserModel({
     required this.uid,
     required this.name,
@@ -23,6 +25,8 @@ class UserModel {
 
     required this.averageRating,
     required this.ratingCount,
+
+    this.isVerified = false,
   });
 
   factory UserModel.fromDoc(DocumentSnapshot doc) {
@@ -43,6 +47,8 @@ class UserModel {
 
       averageRating: _asDouble(data['averageRating']),
       ratingCount: _asInt(data['ratingCount']),
+
+      isVerified: data['isVerified'] ?? false,
     );
   }
 }
