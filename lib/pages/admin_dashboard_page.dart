@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../admin/dashboard_overview_tab.dart';
 import '../admin/approvals_tab.dart';
 import '../admin/manage_items_tab.dart';
@@ -6,6 +7,14 @@ import '../admin/manage_users_tab.dart';
 
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({super.key});
+
+  Future<void> _handleLogout(BuildContext context) async {
+    await AuthService.instance.logout();
+
+    if (context.mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,12 +26,20 @@ class AdminDashboardPage extends StatelessWidget {
             'Admin Console',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          centerTitle: false,
+          centerTitle: true,
           backgroundColor: Colors.indigo[900],
           foregroundColor: Colors.white,
           elevation: 0,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout_rounded),
+              tooltip: 'Logout',
+              onPressed: () => _handleLogout(context),
+            ),
+            const SizedBox(width: 8),
+          ],
+
           bottom: const TabBar(
-            isScrollable: true,
             labelColor: Colors.amberAccent,
             unselectedLabelColor: Colors.white60,
             indicatorColor: Colors.amberAccent,

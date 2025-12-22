@@ -23,12 +23,14 @@ class _FeedPageState extends State<FeedPage>
   String category = 'All';
   final cats = const [
     'All',
-    'General',
     'Electronics',
-    'Documents',
-    'Clothing',
-    'Accessories',
-    'Cards',
+    'Wallets & IDs',
+    'Keys',
+    'Bags & Luggage',
+    'Clothing & Wearables',
+    'Books & Stationery',
+    'Water Bottles',
+    'Sports & Hobby',
     'Others',
   ];
 

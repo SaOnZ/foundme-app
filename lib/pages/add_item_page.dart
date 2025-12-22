@@ -31,25 +31,25 @@ class _AddItemPageState extends State<AddItemPage> {
   final _locationController = TextEditingController();
 
   String _type = 'lost';
-  String _category = 'General';
-  // ignore: prefer_final_fields
+  String _category = 'Others';
   List<XFile> _photos = [];
   double? _lat, _lng;
   String _locationText = '';
 
   bool _saving = false;
+  bool _isAiScanning = false;
 
   bool get _isEdit => widget.editing != null;
 
   final _cats = const [
-    'General',
     'Electronics',
-    'Clothing',
-    'Accessories',
-    'Cards',
-    'Documents',
+    'Wallets & IDs',
     'Keys',
-    'Bags',
+    'Bags & Luggage',
+    'Clothing & Wearables',
+    'Books & Stationery',
+    'Water Bottles',
+    'Sports & Hobby',
     'Others',
   ];
 
@@ -78,13 +78,52 @@ class _AddItemPageState extends State<AddItemPage> {
     super.dispose();
   }
 
-  /// AI Helper: Generates tags from an image file
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        elevation: 10,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              color: Colors.blueAccent,
+              size: 28,
+            ),
+            SizedBox(width: 10),
+            Text("Attention"),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              "OK",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _generateTagsFromImage(XFile file) async {
-    print('!!! STARTING SMART AI SCAN !!!');
+    setState(() => _isAiScanning = true);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Asking AI to fill out your post...')),
+      const SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.auto_awesome, color: Colors.white),
+            SizedBox(width: 10),
+            Text('AI is analyzing your image...'),
+          ],
+        ),
+        backgroundColor: Colors.purple,
+        duration: Duration(seconds: 2),
+      ),
     );
 
     try {
@@ -112,14 +151,11 @@ class _AddItemPageState extends State<AddItemPage> {
       ]);
 
       final String? output = response.text;
-      print('Gemini JSON Response: $output');
-
       if (output != null && output.isNotEmpty) {
         final cleanJson = output
             .replaceAll('```json', '')
             .replaceAll('```', '')
             .trim();
-
         final Map<String, dynamic> data = jsonDecode(cleanJson);
 
         setState(() {
@@ -134,30 +170,28 @@ class _AddItemPageState extends State<AddItemPage> {
           }
 
           // Auto select category
-          String aiCategory = data['category'] ?? 'General';
+          String aiCategory = data['category'] ?? 'Others';
           // Ensure the AI picked a valid category from our list
           if (_cats.contains(aiCategory)) {
             _category = aiCategory;
           } else {
-            _category = 'General'; // Fallback if AI makes up a category
+            _category = 'Others'; // Fallback if AI makes up a category
           }
 
           // Auto fill Tags
           String newTags = data['tags'] ?? '';
           final currentTags = _tags.text;
           final Set<String> uniqueTags = {};
-          if (currentTags.isNotEmpty) {
+          if (currentTags.isNotEmpty)
             uniqueTags.addAll(currentTags.split(', '));
-          }
           uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
           _tags.text = uniqueTags.join(', ');
         });
       }
     } catch (e) {
       print('Gemini Error: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('AI Error: $e')));
+    } finally {
+      setState(() => _isAiScanning = false);
     }
   }
 
@@ -276,17 +310,14 @@ class _AddItemPageState extends State<AddItemPage> {
     if (!_form.currentState!.validate()) return;
 
     if (_lat == null || _lng == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please pick a location')));
+      _showErrorDialog('Please pick a location using the map button.');
       return;
     }
 
     final isEdit = widget.editing != null;
-
     if (!isEdit && _photos.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one photo')),
+      _showErrorDialog(
+        'Please add at least one photo to help others identify the item.',
       );
       return;
     }
@@ -310,7 +341,6 @@ class _AddItemPageState extends State<AddItemPage> {
           tags: tagList,
           lat: _lat!,
           lng: _lng!,
-          //          locationText: _locationText,
           locationText: _locationController.text,
           photos: _photos,
         );
@@ -331,15 +361,11 @@ class _AddItemPageState extends State<AddItemPage> {
             category: _category,
           );
 
-          print(
-            "🔍 DEBUG: Found ${candidates.length} candidates in the database.",
-          );
-
           if (candidates.isNotEmpty) {
             Uint8List imageBytes = Uint8List(0);
-            if (_photos.isNotEmpty) {
+            if (_photos.isNotEmpty)
               imageBytes = await _photos.first.readAsBytes();
-            }
+
             final tempItem = ItemModel(
               id: 'temp',
               type: _type,
@@ -365,7 +391,6 @@ class _AddItemPageState extends State<AddItemPage> {
 
             if (matches.isNotEmpty && mounted) {
               _showMatchDialog(matches, candidates);
-              // Don't pop yet if we are showing dialog
               setState(() => _saving = false);
               return;
             }
@@ -392,11 +417,7 @@ class _AddItemPageState extends State<AddItemPage> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) _showErrorDialog('Error: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -478,10 +499,54 @@ class _AddItemPageState extends State<AddItemPage> {
       ? 'Enter description (min 10 chars)'
       : null;
 
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      filled: true,
+      fillColor: Colors.grey.shade50,
+    );
+  }
+
+  Widget _buildToggleButton(String type, Color color) {
+    final isSelected = _type == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _type = type),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected
+                ? [const BoxShadow(color: Colors.black12, blurRadius: 4)]
+                : [],
+          ),
+          child: Text(
+            type.toUpperCase(),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? color : Colors.grey,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isEdit ? 'Edit post' : 'Create post')),
+      appBar: AppBar(
+        title: Text(_isEdit ? 'Edit post' : 'New Report'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -489,162 +554,206 @@ class _AddItemPageState extends State<AddItemPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DropdownButtonFormField(
-                initialValue: _type,
-                decoration: const InputDecoration(labelText: 'Type'),
-                items: const [
-                  DropdownMenuItem(value: 'lost', child: Text('Lost')),
-                  DropdownMenuItem(value: 'found', child: Text('Found')),
-                ],
-                onChanged: (v) => setState(() => _type = v as String),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _title,
-                decoration: const InputDecoration(labelText: 'Title'),
-                validator: _vTitle,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _desc,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Description'),
-                validator: _vDesc,
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField(
-                initialValue: _category,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: _cats
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (v) => setState(() => _category = v as String),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _tags,
-                decoration: const InputDecoration(
-                  labelText: 'Tags (comma separated)',
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    _buildToggleButton('Lost', Colors.redAccent),
+                    _buildToggleButton('Found', Colors.green),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 24),
 
+              const Text(
+                "Photos",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 10),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
-                  for (int i = 0; i < _photos.length; i++)
-                    Stack(
+                  ..._photos.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final photo = entry.value;
+                    return Stack(
                       alignment: Alignment.topRight,
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
                           child: Image.file(
-                            File(_photos[i].path),
-                            height: 80,
-                            width: 80,
+                            File(photo.path),
+                            height: 100,
+                            width: 100,
                             fit: BoxFit.cover,
                           ),
                         ),
-                        // -- This is the Remove Button ---
                         InkWell(
-                          onTap: () {
-                            setState(() {
-                              _photos.removeAt(i);
-                            });
-                          },
+                          onTap: () => setState(() => _photos.removeAt(index)),
                           child: Container(
                             margin: const EdgeInsets.all(4),
                             decoration: const BoxDecoration(
-                              color: Colors.black54,
+                              color: Colors.red,
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
                               Icons.close,
                               color: Colors.white,
-                              size: 16,
+                              size: 18,
                             ),
                           ),
                         ),
                       ],
-                    ),
+                    );
+                  }),
 
                   if (_photos.length < 4)
                     InkWell(
                       onTap: _showPhotoOptions,
                       child: Container(
-                        height: 80,
-                        width: 80,
+                        height: 100,
+                        width: 100,
                         decoration: BoxDecoration(
-                          border: Border.all(),
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.grey.shade400,
+                            style: BorderStyle.solid,
+                          ),
                         ),
-                        child: const Icon(Icons.add_a_photo_outlined),
+                        child: _isAiScanning
+                            ? const Center(child: CircularProgressIndicator())
+                            : const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_a_photo,
+                                    color: Colors.blueAccent,
+                                  ),
+                                  Text(
+                                    "Add",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
                       ),
                     ),
                 ],
               ),
-
-              const SizedBox(height: 12),
-
-              /*              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  _locationText.isEmpty ? 'Pick location' : _locationText,
+              if (_isAiScanning)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    "✨ AI is analyzing image...",
+                    style: TextStyle(color: Colors.purple, fontSize: 12),
+                  ),
                 ),
-                leading: const Icon(Icons.place_outlined),
-                trailing: ElevatedButton(
-                  onPressed: _pickLocation,
-                  child: const Text('map'),
+              const SizedBox(height: 24),
+
+              TextFormField(
+                controller: _title,
+                decoration: _inputDecoration('Item Title', Icons.title),
+                validator: _vTitle,
+              ),
+              const SizedBox(height: 16),
+
+              DropdownButtonFormField<String>(
+                value: _category,
+                decoration: _inputDecoration(
+                  'Category',
+                  Icons.category_outlined,
                 ),
-              ), */
+                items: _cats
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _category = v as String),
+              ),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _desc,
+                maxLines: 3,
+                decoration: _inputDecoration(
+                  'Description',
+                  Icons.description_outlined,
+                ),
+                validator: _vDesc,
+              ),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _tags,
+                decoration: _inputDecoration(
+                  'Tags (e.g. Blue, Wallet)',
+                  Icons.tag,
+                ),
+              ),
+              const SizedBox(height: 16),
+
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: TextFormField(
                       controller: _locationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Location',
-                        hintText: 'e.g. Library Level 2',
-                        prefixIcon: Icon(Icons.place_outlined),
-                        border: OutlineInputBorder(),
+                      decoration: _inputDecoration(
+                        'Location (e.g. Library)',
+                        Icons.place_outlined,
                       ),
-                      maxLines: 2,
-                      // Simple validation to ensure they didn't leave it blank
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Plesae pick or type a location'
-                          : null,
                     ),
                   ),
                   const SizedBox(width: 8),
-
-                  // The Map Button
-                  Container(
-                    height: 56,
-                    margin: const EdgeInsets.only(top: 0),
+                  SizedBox(
+                    height: 58,
                     child: ElevatedButton(
                       onPressed: _pickLocation,
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        backgroundColor: Colors.blue.shade50,
+                        foregroundColor: Colors.blue,
+                        elevation: 0,
                       ),
-                      child: const Icon(Icons.map),
+                      child: const Icon(Icons.map, size: 28),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+
+              const SizedBox(height: 32),
 
               SizedBox(
                 width: double.infinity,
+                height: 54,
                 child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _type == 'lost'
+                        ? Colors.redAccent
+                        : Colors.green,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   onPressed: _saving ? null : _submit,
                   child: _saving
-                      ? const CircularProgressIndicator()
-                      : Text(_isEdit ? 'Save' : 'Post'),
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          _isEdit ? 'Save Changes' : ' Submit Post',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
             ],

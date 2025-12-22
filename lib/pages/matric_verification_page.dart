@@ -33,7 +33,10 @@ class _MatricVerificationPageState extends State<MatricVerificationPage> {
   }
 
   Future<void> _scanMatricCard() async {
-    if (_image == null) return;
+    if (_image == null) {
+      setState(() => _errorMsg = "Please take a phot first.");
+      return;
+    }
 
     setState(() => _isScanning = true);
 
@@ -115,6 +118,16 @@ class _MatricVerificationPageState extends State<MatricVerificationPage> {
               matricUrl = await ref.getDownloadURL();
             } catch (e) {
               print("Failed to upload matric card: $e");
+              setState(
+                () => _errorMsg =
+                    "Failed to uplaod photo. Check internet/permissions.",
+              );
+              return;
+            }
+
+            if (matricUrl == null) {
+              setState(() => _errorMsg = "Upload failed (Url is null).");
+              return;
             }
 
             // SUCCESS: Verify the user in Firestore

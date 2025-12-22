@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -64,6 +66,7 @@ class _LoginPageState extends State<LoginPage> {
 
     // 2. Standard validation
     if (!_form.currentState!.validate()) return;
+
     setState(() => _loading = true);
 
     try {
@@ -71,11 +74,29 @@ class _LoginPageState extends State<LoginPage> {
         email: _email.text,
         password: _pass.text,
       );
-      if (mounted) Navigator.pushReplacementNamed(context, '/');
+
+      final User? user = FirebaseAuth.instance.currentUser;
+
+      if (user != null) {
+        final DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        final String role = userDoc.get('role') ?? 'student';
+        print("👮 Role detected: '$role'"); // DEBUG
+
+        if (mounted) {
+          if (role == 'admin') {
+            Navigator.pushReplacementNamed(context, '/admin');
+          } else {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
+        }
+      }
     } catch (e) {
       // 3. Handle Firebase errors nicely
       String errorMessage = "An unexpected error occurred.";
-
       if (e.toString().contains('user-not-found')) {
         errorMessage = "We couldn't find an account with that email.";
       } else if (e.toString().contains('wrong-password')) {

@@ -12,6 +12,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/notification_service.dart';
 import "package:cloud_firestore/cloud_firestore.dart";
 import 'pages/matric_verification_page.dart';
+import 'pages/admin_dashboard_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,12 +58,13 @@ class FoundMeApp extends StatelessWidget {
       theme: ThemeData(useMaterial3: true),
       initialRoute: '/',
       routes: {
-        '/': (_) => const AuthGate(),
-        '/login': (_) => const LoginPage(),
-        '/register': (_) => const RegisterPage(),
-        '/verify': (_) => const VerifyEmailPage(),
-        '/forgot': (_) => const ForgotPasswordPage(),
-        '/home': (_) => const HomePage(),
+        '/': (context) => const AuthGate(),
+        '/login': (context) => const LoginPage(),
+        '/register': (context) => const RegisterPage(),
+        '/verify': (context) => const VerifyEmailPage(),
+        '/forgot': (context) => const ForgotPasswordPage(),
+        '/home': (context) => const HomePage(),
+        '/admin': (context) => const AdminDashboardPage(),
       },
     );
   }
@@ -111,7 +113,7 @@ class AuthGate extends StatelessWidget {
             final isVerified = userData?['isVerified'] ?? false;
 
             if (role == 'admin') {
-              return const HomePage();
+              return const AdminDashboardPage();
             }
 
             // For normal users, check Matric Verification
