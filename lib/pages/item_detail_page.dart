@@ -74,30 +74,64 @@ class ItemDetailPage extends StatelessWidget {
       ),
     );
 
-    if (confirm == true) {
-      await FirebaseFirestore.instance.collection('items').doc(item.id).update({
-        'status': 'resolved',
-      });
+    if (confirm != true) return;
+
+    // Look up the accepted claim so we can close the claim alongside the
+    // item and pass the real claim id (not the item id) to the rating
+    // sheet — submitReview reads claims/{claimId}, so the previous
+    // implementation always failed with not-found.
+    final acceptedClaim = await FirebaseFirestore.instance
+        .collection('claims')
+        .where('itemId', isEqualTo: item.id)
+        .where('status', isEqualTo: 'accepted')
+        .limit(1)
+        .get();
+
+    if (acceptedClaim.docs.isEmpty) {
+      // No accepted claim (owner found the item without anyone claiming it).
+      // Close the item; nobody to rate.
+      await FirebaseFirestore.instance
+          .collection('items')
+          .doc(item.id)
+          .update({'status': 'closed'});
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Item marked as resolved! Please rate the user.'),
-          ),
-        );
-        //Navigator.pop(context);
-        _showRatingSheet(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Item closed.')));
       }
+      return;
     }
+
+    final claimDoc = acceptedClaim.docs.first;
+    final claimerUid = (claimDoc.data())['claimerUid'] as String?;
+    await ClaimService.instance.closeClaimAndItem(claimDoc.id, item.id);
+
+    final claimerName = claimerUid == null
+        ? 'the Claimer'
+        : (await AuthService.instance.getUserProfile(claimerUid))?.name ??
+            'the Claimer';
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Item resolved. Please rate the claimer.'),
+      ),
+    );
+    _showRatingSheet(context, claimDoc.id, claimerName);
   }
 
-  void _showRatingSheet(BuildContext context) {
+  void _showRatingSheet(
+    BuildContext context,
+    String claimId,
+    String claimerName,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => RateUserSheet(
-        targetUserName: "the User",
-        claimId: item.id,
+        targetUserName: claimerName,
+        claimId: claimId,
         roleToReview: "claimer",
       ),
     );
@@ -286,8 +320,8 @@ class ItemDetailPage extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
 
-                      // RESOLVE BUTTON (Only show if active)
-                      if (item.status != 'resolved')
+                      // RESOLVE BUTTON (Only show if not already closed)
+                      if (item.status != 'closed')
                         Expanded(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
