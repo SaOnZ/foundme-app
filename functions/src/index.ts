@@ -121,7 +121,7 @@ export const submitReview = onCall(async (request) => {
 
       // Update the user's profile
       transaction.update(userRef, {
-        averagerating: newAvg,
+        averageRating: newAvg,
         ratingCount: newCt,
       });
 
