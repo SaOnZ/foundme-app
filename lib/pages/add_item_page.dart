@@ -58,7 +58,7 @@ class _AddItemPageState extends State<AddItemPage> {
     super.initState();
     final it = widget.editing;
     if (it != null) {
-      _type = it.type;
+      _type = it.type.toLowerCase();
       _category = it.category;
       _title.text = it.title;
       _desc.text = it.desc;
@@ -563,8 +563,8 @@ class _AddItemPageState extends State<AddItemPage> {
                 ),
                 child: Row(
                   children: [
-                    _buildToggleButton('Lost', Colors.redAccent),
-                    _buildToggleButton('Found', Colors.green),
+                    _buildToggleButton('lost', Colors.redAccent),
+                    _buildToggleButton('found', Colors.green),
                   ],
                 ),
               ),
