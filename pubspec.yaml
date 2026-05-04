@@ -53,7 +53,6 @@ dependencies:
   google_mlkit_image_labeling: ^0.13.0
   google_generative_ai: ^0.4.0
   flutter_dotenv: ^6.0.0
-  googleapis_auth: ^2.0.0
   google_sign_in: ^6.2.1
   fl_chart: ^1.1.1
   intl: ^0.20.2

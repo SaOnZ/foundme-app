@@ -7,11 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/report_dialog.dart';
 import 'profile_page.dart';
 import '../models/user_model.dart';
-import 'package:googleapis_auth/auth_io.dart' as auth;
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../widgets/rate_user_sheet.dart';
 
 class ItemDetailPage extends StatelessWidget {
@@ -479,85 +475,8 @@ class ItemDetailPage extends StatelessWidget {
 
       if (!context.mounted) return;
 
-      // --- NEW NOTIFICATION CODE STARTS HERE ---
-      // Get the owner's FCM token from firestore
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(item.ownerUid)
-          .get();
-
-      String? ownerToken;
-
-      // Check if the data exists
-      if (userDoc.exists && userDoc.data() != null) {
-        final data = userDoc.data()!;
-
-        if (data['fcmToken'] is String) {
-          ownerToken = data['fcmToken'];
-        } else if (data['fcmTokens'] is List &&
-            (data['fcmTokens'] as List).isNotEmpty) {
-          ownerToken = (data['fcmTokens'] as List).last.toString();
-        }
-      }
-
-      if (ownerToken != null) {
-        final serviceAccountJson = {
-          "type": "service_account",
-          "project_id": dotenv.env['FCM_PROJECT_ID'],
-          "private_key_id": "5bee0dd0b3bb2351ba79014732bf2ebeb9712a54",
-          "private_key":
-              dotenv.env['FCM_PRIVATE_KEY']?.replaceAll('\\n', '\n') ?? "",
-          "client_email": dotenv.env['FCM_CLIENT_EMAIL'],
-          "client_id": "108810556853786570043",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-          "auth_provider_x509_cert_url":
-              "https://www.googleapis.com/oauth2/v1/certs",
-          "client_x509_cert_url":
-              "https://www.googleapis.com/robot/v1/metadata/x509/${dotenv.env['FCM_CLIENT_EMAIL']}",
-          "universe_domain": "googleapis.com",
-        };
-
-        // Get the Access Token
-        final scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-        final credentials = auth.ServiceAccountCredentials.fromJson(
-          serviceAccountJson,
-        );
-        final client = await auth.clientViaServiceAccount(credentials, scopes);
-
-        // Send the V1 Request
-        final response = await client.post(
-          Uri.parse(
-            'https://fcm.googleapis.com/v1/projects/foundme-28322/messages:send',
-          ),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            "message": {
-              "token": ownerToken,
-              "notification": {
-                "title": "Someone claimed your item!",
-                "body": "Check your messages: \"${msg.trim()}\"",
-              },
-              "data": {
-                "click_action": "FLUTTER_NOTIFICATION_CLICK",
-                "type": "claim_alert",
-                "claimId": claimId,
-              },
-              "android": {
-                "priority": "high", // High priority for Realme/Xiaomi
-                "notification": {"channel_id": "high_importance_channel"},
-              },
-            },
-          }),
-        );
-
-        print("📡 FCM Response Status: ${response.statusCode}");
-        print("📡 FCM Response Body: ${response.body}");
-
-        client.close();
-      } else {
-        print("Owner has no token.");
-      }
+      // The onNewClaimV2 Cloud Function trigger fires on the new claim doc
+      // and sends the FCM notification to the owner; no client-side send.
 
       ScaffoldMessenger.of(
         context,
