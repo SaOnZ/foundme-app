@@ -1,0 +1,151 @@
+rules_version = '2';
+
+// FoundMe Firestore security rules.
+// Goal: prevent users from escalating their own role/verification, prevent
+// reading other users' private claims/messages, and prevent guests
+// (anonymous auth) from posting items, claims, or chat messages.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAnonymous() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    // A real (non-guest) user.
+    function isUser() {
+      return isSignedIn() && !isAnonymous();
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function uidIs(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isClaimMember(claimId) {
+      let claim = get(/databases/$(database)/documents/claims/$(claimId)).data;
+      return uidIs(claim.ownerUid) || uidIs(claim.claimerUid);
+    }
+
+    // ----- users -----
+    match /users/{uid} {
+      // Anyone signed in (incl. anonymous browsing) can read profiles. The
+      // existing user doc holds matric fields and email; long-term these
+      // should move into a private subcollection. TODO: split public profile
+      // from private fields.
+      allow read: if isSignedIn();
+
+      // Self-create on first sign-in. Block role/disabled escalation. Allow
+      // partial creates (e.g. saveUserToken merging only fcmToken+lastActive).
+      allow create: if uidIs(uid)
+        && (!('role' in request.resource.data) || request.resource.data.role == 'user')
+        && (!('disabled' in request.resource.data) || request.resource.data.disabled == false);
+
+      // Self-update: cannot change role or disabled. Admins can update anyone.
+      // NOTE: matric verification still self-writes isVerified / matricNumber.
+      // That should move to a Cloud Function; tracked for a follow-up branch.
+      allow update: if (uidIs(uid)
+                        && request.resource.data.get('role', 'user') == resource.data.get('role', 'user')
+                        && request.resource.data.get('disabled', false) == resource.data.get('disabled', false))
+                    || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ----- items -----
+    match /items/{itemId} {
+      // Browsing: any signed-in user, including anonymous guests.
+      allow read: if isSignedIn();
+
+      // Posting: real users only (no guests). Owner must match caller and
+      // initial status must be pending_approval (admins approve before active).
+      allow create: if isUser()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'pending_approval';
+
+      // Updates: owner can edit their own item but cannot self-approve.
+      // They can change status to a terminal value (closed/resolved) only.
+      // Admins can update anything (approve, reject, expire, etc).
+      allow update: if (uidIs(resource.data.ownerUid)
+                        && request.resource.data.ownerUid == resource.data.ownerUid
+                        && (request.resource.data.status == resource.data.status
+                            || request.resource.data.status in ['closed', 'resolved']))
+                    || isAdmin();
+
+      allow delete: if uidIs(resource.data.ownerUid) || isAdmin();
+    }
+
+    // ----- claims -----
+    match /claims/{claimId} {
+      // Only the parties to a claim (or admin) can read it.
+      allow read: if isSignedIn()
+        && (uidIs(resource.data.ownerUid)
+            || uidIs(resource.data.claimerUid)
+            || isAdmin());
+
+      // Create: real user, claiming someone else's item, status must start pending.
+      allow create: if isUser()
+        && request.resource.data.claimerUid == request.auth.uid
+        && request.resource.data.ownerUid != request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      // Update: parties can change status. Owner can accept/reject/close;
+      // claimer can only set 'closed'. Immutable fields and review flags
+      // (which the submitReview Cloud Function controls) cannot be changed
+      // from the client.
+      allow update: if isSignedIn()
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.claimerUid == resource.data.claimerUid
+        && request.resource.data.itemId == resource.data.itemId
+        && request.resource.data.get('ownerHasReviewed', false) == resource.data.get('ownerHasReviewed', false)
+        && request.resource.data.get('claimerHasReviewed', false) == resource.data.get('claimerHasReviewed', false)
+        && (uidIs(resource.data.ownerUid)
+            || (uidIs(resource.data.claimerUid)
+                && request.resource.data.status == 'closed'));
+
+      allow delete: if isAdmin();
+    }
+
+    // ----- messages (flat collection, keyed by claimId field) -----
+    // Reads cost an extra get() to look up parent claim membership.
+    match /messages/{messageId} {
+      allow read: if isSignedIn()
+        && (isClaimMember(resource.data.claimId) || isAdmin());
+
+      allow create: if isUser()
+        && request.resource.data.senderUid == request.auth.uid
+        && isClaimMember(request.resource.data.claimId);
+
+      // Chat is append-only.
+      allow update, delete: if isAdmin();
+    }
+
+    // ----- reports -----
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isUser()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+
+    // ----- logs -----
+    match /logs/{logId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // Default deny.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

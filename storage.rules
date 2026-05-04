@@ -1,0 +1,62 @@
+rules_version = '2';
+
+// FoundMe Storage rules.
+// Mirrors the Firestore rules: real users upload, anyone signed in reads
+// item/profile photos, matric cards are admin-only reads.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAnonymous() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    function isUser() {
+      return isSignedIn() && !isAnonymous();
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isImageUnder(maxBytes) {
+      return request.resource.size < maxBytes
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Profile pictures: profile_pictures/{uid}/...
+    match /profile_pictures/{uid}/{file=**} {
+      allow read: if isSignedIn();
+      allow write: if request.auth.uid == uid && isImageUnder(5 * 1024 * 1024);
+    }
+
+    // Item photos: items/{ownerUid}/{itemId}/{filename}
+    match /items/{ownerUid}/{itemId}/{file=**} {
+      allow read: if isSignedIn();
+      allow create, update: if isUser()
+        && request.auth.uid == ownerUid
+        && isImageUnder(10 * 1024 * 1024);
+      allow delete: if request.auth.uid == ownerUid || isAdmin();
+    }
+
+    // Matric cards: matric_cards/{uid}.jpg — sensitive personal ID.
+    // Only the owner can write; only admins can read.
+    match /matric_cards/{filename} {
+      allow read: if isAdmin();
+      allow write: if isUser()
+        && filename == request.auth.uid + '.jpg'
+        && isImageUnder(10 * 1024 * 1024);
+    }
+
+    // Default deny.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
