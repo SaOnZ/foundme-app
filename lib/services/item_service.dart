@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -7,10 +8,6 @@ import 'package:uuid/uuid.dart';
 import 'auth_service.dart';
 import '../models/item.dart';
 import 'package:mime/mime.dart';
-import 'package:googleapis_auth/auth_io.dart' as auth;
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../services/log_service.dart';
 
 class ItemService {
@@ -287,68 +284,9 @@ class ItemService {
     String body,
   ) async {
     try {
-      // Get Token from Users Collection
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(targetUid)
-          .get();
-      String? token;
-
-      if (userDoc.exists) {
-        final data = userDoc.data()!;
-        if (data['fcmToken'] is String) {
-          token = data['fcmToken'];
-        } else if (data['fcmTokens'] is List &&
-            (data['fcmTokens'] as List).isNotEmpty) {
-          token = (data['fcmTokens'] as List).last.toString();
-        }
-      }
-
-      if (token == null) return;
-
-      // Authenticate with Service Account
-      final serviceAccountJson = {
-        "type": "service_account",
-        "project_id": dotenv.env['FCM_PROJECT_ID'],
-        "private_key_id": "5bee0dd0b3bb2351ba79014732bf2ebeb9712a54",
-        "private_key":
-            dotenv.env['FCM_PRIVATE_KEY']?.replaceAll('\\n', '\n') ?? "",
-        "client_email": dotenv.env['FCM_CLIENT_EMAIL'],
-        "client_id": "108810556853786570043",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url":
-            "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url":
-            "https://www.googleapis.com/robot/v1/metadata/x509/${dotenv.env['FCM_CLIENT_EMAIL']}",
-        "universe_domain": "googleapis.com",
-      };
-
-      final scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-      final credentials = auth.ServiceAccountCredentials.fromJson(
-        serviceAccountJson,
-      );
-      final client = await auth.clientViaServiceAccount(credentials, scopes);
-
-      // Send Request to FCM V1
-      await client.post(
-        Uri.parse(
-          'https://fcm.googleapis.com/v1/projects/foundme-28322/messages:send',
-        ),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "message": {
-            "token": token,
-            "notification": {"title": title, "body": body},
-            "android": {
-              "priority": "high",
-              "notification": {"channel_id": "high_importance_channel"},
-            },
-          },
-        }),
-      );
-      client.close();
-      print("Admin notification sent to user.");
+      await FirebaseFunctions.instance
+          .httpsCallable('sendAdminNotification')
+          .call({'targetUid': targetUid, 'title': title, 'body': body});
     } catch (e) {
       print("Failed to send admin notification: $e");
     }

@@ -192,6 +192,77 @@ export const disableUser = onCall(async (request) => {
   }
 })
 
+// ===================================================================
+//  sendAdminNotification (Callable Function)
+//  Replaces the previous client-side FCM v1 path that bundled a
+//  service-account key in the app. Admins call this; the function
+//  verifies admin role and sends via the project's default service
+//  account. Used for post approval/rejection notifications.
+// ===================================================================
+export const sendAdminNotification = onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  const { targetUid, title, body, data } = request.data;
+
+  if (!callerUid) {
+    throw new HttpsError("unauthenticated", "You must be logged in.");
+  }
+
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  if (callerDoc.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "Admin only.");
+  }
+
+  if (!targetUid || !title || !body) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Missing targetUid, title, or body.",
+    );
+  }
+
+  // Collect target tokens. Schema is mid-migration: some users have a
+  // fcmTokens array, some still carry a legacy fcmToken string.
+  const targetDoc = await db.collection("users").doc(targetUid).get();
+  const targetData = targetDoc.data() || {};
+  const tokens: string[] = [];
+  if (Array.isArray(targetData.fcmTokens)) {
+    for (const t of targetData.fcmTokens) {
+      if (typeof t === "string" && t && !tokens.includes(t)) tokens.push(t);
+    }
+  }
+  if (
+    typeof targetData.fcmToken === "string" &&
+    targetData.fcmToken &&
+    !tokens.includes(targetData.fcmToken)
+  ) {
+    tokens.push(targetData.fcmToken);
+  }
+
+  if (tokens.length === 0) {
+    logger.log(`No FCM tokens for user ${targetUid}.`);
+    return { success: true, sent: 0 };
+  }
+
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title, body },
+    data: data || {},
+    android: {
+      priority: "high",
+      notification: { channelId: "high_importance_channel" },
+    },
+  });
+
+  logger.log(
+    `Admin ${callerUid} notified ${targetUid}: ` +
+      `${response.successCount}/${tokens.length} delivered.`,
+  );
+  return {
+    success: true,
+    sent: response.successCount,
+    failed: response.failureCount,
+  };
+});
+
 /**
  * Triggers when a new claim is created.
  * Sends a notification to the ITEM OWNER.
