@@ -8,7 +8,6 @@ import 'pages/verify_email_page.dart';
 import 'pages/forgot_password_page.dart';
 import 'pages/home_page.dart';
 import 'services/navigation_service.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/notification_service.dart';
 import "package:cloud_firestore/cloud_firestore.dart";
 import 'pages/matric_verification_page.dart';
@@ -27,11 +26,6 @@ void main() async {
     } else {
       rethrow;
     }
-  }
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    print("Failed to load .env: $e");
   }
 
   await NotificationService.instance.init();

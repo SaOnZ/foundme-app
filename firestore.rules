@@ -50,12 +50,16 @@ service cloud.firestore {
         && (!('role' in request.resource.data) || request.resource.data.role == 'user')
         && (!('disabled' in request.resource.data) || request.resource.data.disabled == false);
 
-      // Self-update: cannot change role or disabled. Admins can update anyone.
-      // NOTE: matric verification still self-writes isVerified / matricNumber.
-      // That should move to a Cloud Function; tracked for a follow-up branch.
+      // Self-update: cannot change role, disabled, or any verification
+      // field. The verifyMatricCard Cloud Function writes isVerified /
+      // matricNumber via the admin SDK, which bypasses these rules.
       allow update: if (uidIs(uid)
                         && request.resource.data.get('role', 'user') == resource.data.get('role', 'user')
-                        && request.resource.data.get('disabled', false) == resource.data.get('disabled', false))
+                        && request.resource.data.get('disabled', false) == resource.data.get('disabled', false)
+                        && request.resource.data.get('isVerified', false) == resource.data.get('isVerified', false)
+                        && request.resource.data.get('matricNumber', '') == resource.data.get('matricNumber', '')
+                        && request.resource.data.get('matricCardUrl', '') == resource.data.get('matricCardUrl', '')
+                        && request.resource.data.get('matricName', '') == resource.data.get('matricName', ''))
                     || isAdmin();
 
       allow delete: if isAdmin();

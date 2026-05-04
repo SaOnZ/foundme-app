@@ -1,12 +1,29 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from  "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize the Firebase Admin SDK
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
+const storage = admin.storage();
+
+// Gemini API key, supplied via:  firebase functions:secrets:set GEMINI_API_KEY
+const geminiKey = defineSecret("GEMINI_API_KEY");
+const GEMINI_MODEL = "gemini-2.0-flash-lite-001";
+
+// Pull the first JSON value out of an LLM response that may wrap it in
+// ```json blocks or surrounding prose.
+function extractJson(raw: string, openChar: "{" | "["): string | null {
+  const closeChar = openChar === "{" ? "}" : "]";
+  const start = raw.indexOf(openChar);
+  const end = raw.lastIndexOf(closeChar);
+  if (start === -1 || end === -1 || end < start) return null;
+  return raw.substring(start, end + 1);
+}
 
 // ===================================================================
 //  NEW FUNCTION: submitReview (Callable Function)
@@ -387,3 +404,267 @@ export const onNewMessageV2 = onDocumentCreated("messages/{messageId}", async (e
     logger.error("Error sending 'New Message' notification:", error);
   }
 });
+
+// ===================================================================
+//  Gemini-backed callable functions.
+//  These replace three client-side calls that used to bundle the
+//  GEMINI_API_KEY in the APK via .env. The key now lives only in the
+//  Functions runtime as a Firebase secret.
+// ===================================================================
+
+// analyzeItemImage — reads the photo a user just picked when adding an
+// item, returns suggested title / description / category / tag string.
+export const analyzeItemImage = onCall(
+  { secrets: [geminiKey] },
+  async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+
+    const { imageBase64, validCategories } = request.data as {
+      imageBase64?: string;
+      validCategories?: string[];
+    };
+    if (!imageBase64 || typeof imageBase64 !== "string") {
+      throw new HttpsError("invalid-argument", "Missing imageBase64.");
+    }
+    const cats = Array.isArray(validCategories) ? validCategories : [];
+
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey.value());
+      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+
+      const prompt =
+        "Analyze this lost item image.\n" +
+        "Return a single JSON object with these 4 fields:\n" +
+        "1. 'title': A short, clear title (e.g., 'Black Leather Wallet').\n" +
+        "2. 'description': A helpful description (max 20 words). Focus on " +
+        "color, brand, and distinguishing features.\n" +
+        `3. 'category': Pick exactly ONE from this list: [${cats.join(", ")}]. ` +
+        "If unsure, use 'Others'.\n" +
+        "4. 'tags': A single string of 5 comma-separated keywords.\n\n" +
+        "IMPORTANT: Return ONLY raw JSON. Do not use Markdown blocks.";
+
+      const result = await model.generateContent([
+        prompt,
+        { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+      ]);
+      const text = result.response.text();
+      const json = extractJson(text, "{");
+      if (!json) {
+        throw new HttpsError("internal", "Model returned no usable JSON.");
+      }
+      return JSON.parse(json);
+    } catch (e) {
+      logger.error("analyzeItemImage failed:", e);
+      throw new HttpsError("internal", "Image analysis failed.");
+    }
+  },
+);
+
+// verifyMatricCard — reads the matric card photo the client uploaded to
+// matric_cards/{uid}.jpg, asks Gemini to verify it's a valid USIM card
+// and extract the matric number, then writes isVerified + matricNumber
+// to the user doc using the admin SDK (which bypasses the rule that
+// blocks self-set isVerified). Returns success/reason to the client.
+export const verifyMatricCard = onCall(
+  { secrets: [geminiKey] },
+  async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+
+    const bucket = storage.bucket();
+    const filePath = `matric_cards/${callerUid}.jpg`;
+    const file = bucket.file(filePath);
+
+    const [exists] = await file.exists();
+    if (!exists) {
+      throw new HttpsError(
+        "not-found",
+        "No matric card image found. Please upload first.",
+      );
+    }
+
+    let imageBase64: string;
+    try {
+      const [buffer] = await file.download();
+      imageBase64 = buffer.toString("base64");
+    } catch (e) {
+      logger.error("Failed to read matric card image:", e);
+      throw new HttpsError("internal", "Could not read uploaded image.");
+    }
+
+    let parsed: {
+      is_valid_card?: boolean;
+      is_usim?: boolean;
+      name?: string;
+      matric_no?: string;
+      reason?: string;
+    };
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey.value());
+      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+      const prompt =
+        "Analyze this image. It should be a University Student ID " +
+        "(Matric Card).\n\n" +
+        "1. Is this a valid student ID card?\n" +
+        "2. Does it belong to a university named 'USIM' or " +
+        "'Universiti Sains Islam Malaysia'?\n" +
+        "3. Extract the Student Name and Matric Number.\n\n" +
+        "RETURN JSON ONLY:\n" +
+        '{"is_valid_card": true, "is_usim": true, ' +
+        '"name": "Student Name", "matric_no": "123456", ' +
+        '"reason": "Clear USIM logo visible"}';
+
+      const result = await model.generateContent([
+        prompt,
+        { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+      ]);
+      const text = result.response.text();
+      const json = extractJson(text, "{");
+      if (!json) {
+        throw new HttpsError("internal", "Model returned no usable JSON.");
+      }
+      parsed = JSON.parse(json);
+    } catch (e) {
+      logger.error("Matric Gemini call failed:", e);
+      throw new HttpsError("internal", "Verification failed.");
+    }
+
+    if (!parsed.is_valid_card || !parsed.is_usim || !parsed.matric_no) {
+      return {
+        success: false,
+        reason: parsed.reason || "Could not verify the matric card.",
+      };
+    }
+
+    // Reject if this matric number is already linked to a different user.
+    const dup = await db
+      .collection("users")
+      .where("matricNumber", "==", parsed.matric_no)
+      .limit(1)
+      .get();
+    if (!dup.empty && dup.docs[0].id !== callerUid) {
+      return {
+        success: false,
+        reason: `Matric ${parsed.matric_no} is already registered to another account.`,
+      };
+    }
+
+    const [downloadUrl] = await file.getSignedUrl({
+      action: "read",
+      expires: "01-01-2100",
+    });
+
+    await db.collection("users").doc(callerUid).update({
+      isVerified: true,
+      matricNumber: parsed.matric_no,
+      matricName: parsed.name || null,
+      matricCardUrl: downloadUrl,
+      verificationDate: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    logger.log(`Matric card verified for ${callerUid}.`);
+    return { success: true };
+  },
+);
+
+// findMatchingItems — given the just-created item, queries Firestore for
+// candidate items of the opposite type+category and asks Gemini which
+// ones match. Returns the array of matches as { id, score, reason }.
+export const findMatchingItems = onCall(
+  { secrets: [geminiKey] },
+  async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+      throw new HttpsError("unauthenticated", "You must be logged in.");
+    }
+
+    const { itemId, imageBase64 } = request.data as {
+      itemId?: string;
+      imageBase64?: string;
+    };
+    if (!itemId) {
+      throw new HttpsError("invalid-argument", "Missing itemId.");
+    }
+
+    const itemDoc = await db.collection("items").doc(itemId).get();
+    if (!itemDoc.exists) {
+      throw new HttpsError("not-found", "Item not found.");
+    }
+    const item = itemDoc.data()!;
+    if (item.ownerUid !== callerUid) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the item owner can request matches.",
+      );
+    }
+
+    const targetType = item.type === "lost" ? "found" : "lost";
+    const candidatesSnap = await db
+      .collection("items")
+      .where("type", "==", targetType)
+      .where("category", "==", item.category)
+      .where("status", "==", "active")
+      .orderBy("postedAt", "desc")
+      .limit(20)
+      .get();
+
+    if (candidatesSnap.empty) return [];
+
+    const candidateText = candidatesSnap.docs
+      .map((d) => {
+        const c = d.data();
+        const tags = Array.isArray(c.tags) ? c.tags.join(", ") : "";
+        return `ID: ${d.id} | Title: ${c.title || ""} | ` +
+          `Description: ${c.desc || ""} | Tags: ${tags}`;
+      })
+      .join("\n");
+
+    const prompt =
+      "Act as a matching engine.\n\n" +
+      "INPUT ITEM:\n" +
+      `Title: ${item.title || ""}\n` +
+      `Desc: ${item.desc || ""}\n\n` +
+      "CANDIDATE DATABASE:\n" +
+      candidateText +
+      "\n\nTASK:\n" +
+      "Compare the INPUT against EVERY SINGLE ITEM in the CANDIDATE DATABASE.\n\n" +
+      "CRITICAL RULES:\n" +
+      "1. Do not stop at the first match. Check every candidate.\n" +
+      "2. Return ALL matches with a score > 60.\n" +
+      "3. If there are 3 matches, return 3 items in the list. If none, " +
+      "return an empty list.\n\n" +
+      "OUTPUT FORMAT:\n" +
+      "Return ONLY a JSON List. Do not write 'Here is the JSON' or use " +
+      "markdown blocks.\n" +
+      'Example: [{"id": "123", "score": 90, "reason": "Visual match"}]';
+
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey.value());
+      const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+
+      const parts: Array<
+        | string
+        | { inlineData: { mimeType: string; data: string } }
+      > = [prompt];
+      if (imageBase64) {
+        parts.push({
+          inlineData: { mimeType: "image/jpeg", data: imageBase64 },
+        });
+      }
+
+      const result = await model.generateContent(parts);
+      const text = result.response.text();
+      const json = extractJson(text, "[");
+      if (!json) return [];
+      return JSON.parse(json);
+    } catch (e) {
+      logger.error("findMatchingItems failed:", e);
+      throw new HttpsError("internal", "Match lookup failed.");
+    }
+  },
+);
