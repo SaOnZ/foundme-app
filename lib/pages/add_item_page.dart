@@ -1,17 +1,16 @@
 // ignore_for_file: unused_element
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data'; // read image bytes
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/item.dart';
 import '../services/item_service.dart';
 import '../widgets/map_picker_page.dart';
-import 'dart:typed_data'; // read image bytes
-import 'package:google_generative_ai/google_generative_ai.dart';
-import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../services/ai_matching_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'item_detail_page.dart';
 
 class AddItemPage extends StatefulWidget {
@@ -127,63 +126,36 @@ class _AddItemPageState extends State<AddItemPage> {
     );
 
     try {
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash-lite-001',
-        apiKey: dotenv.env['GEMINI_API_KEY']!,
-      );
-
       final Uint8List imageBytes = await file.readAsBytes();
 
-      final validCategories = _cats.join(', ');
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('analyzeItemImage')
+          .call({
+            'imageBase64': base64Encode(imageBytes),
+            'validCategories': _cats,
+          });
 
-      final prompt = TextPart(
-        "Analyze this lost item image. \n"
-        "Return a single JSON object with these 4 fields:\n"
-        "1. 'title': A short, clear title (e.g., 'Black Leather Wallet', 'Honda Car Keys').\n"
-        "2. 'description': A helpful description (max 20 words). Focus on color, brand, and distinguishing features.\n"
-        "3. 'category': Pick exactly ONE from this list: [$validCategories]. If unsure, use 'General'.\n"
-        "4. 'tags': A single string of 5 comma-separated keywords.\n\n"
-        "IMPORTANT: Return ONLY raw JSON. Do not use Markdown blocks (```json).",
-      );
-
-      final response = await model.generateContent([
-        Content.multi([prompt, DataPart('image/jpeg', imageBytes)]),
-      ]);
-
-      final String? output = response.text;
-      if (output != null && output.isNotEmpty) {
-        final cleanJson = output
-            .replaceAll('```json', '')
-            .replaceAll('```', '')
-            .trim();
-        final Map<String, dynamic> data = jsonDecode(cleanJson);
+      final data = result.data;
+      if (data is Map) {
+        final parsed = Map<String, dynamic>.from(data);
 
         setState(() {
-          // Auto fill title (only if empty)
           if (_title.text.isEmpty) {
-            _title.text = data['title'] ?? '';
+            _title.text = parsed['title'] ?? '';
           }
-
-          // Auto fill description (only if empty or short)
           if (_desc.text.length < 5) {
-            _desc.text = data['description'] ?? '';
+            _desc.text = parsed['description'] ?? '';
           }
 
-          // Auto select category
-          String aiCategory = data['category'] ?? 'Others';
-          // Ensure the AI picked a valid category from our list
-          if (_cats.contains(aiCategory)) {
-            _category = aiCategory;
-          } else {
-            _category = 'Others'; // Fallback if AI makes up a category
-          }
+          final String aiCategory = parsed['category'] ?? 'Others';
+          _category = _cats.contains(aiCategory) ? aiCategory : 'Others';
 
-          // Auto fill Tags
-          String newTags = data['tags'] ?? '';
+          final String newTags = parsed['tags'] ?? '';
           final currentTags = _tags.text;
           final Set<String> uniqueTags = {};
-          if (currentTags.isNotEmpty)
+          if (currentTags.isNotEmpty) {
             uniqueTags.addAll(currentTags.split(', '));
+          }
           uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
           _tags.text = uniqueTags.join(', ');
         });
@@ -333,7 +305,7 @@ class _AddItemPageState extends State<AddItemPage> {
           .toList();
 
       if (!isEdit) {
-        await ItemService.instance.createItem(
+        final newItemId = await ItemService.instance.createItem(
           type: _type,
           title: _title.text,
           desc: _desc.text,
@@ -355,42 +327,36 @@ class _AddItemPageState extends State<AddItemPage> {
             ),
           );
 
-          // A. Get Candidates
-          final candidates = await ItemService.instance.getMatchingCandidates(
-            currentType: _type,
-            category: _category,
+          // Ask the findMatchingItems Cloud Function to compare this post
+          // against active opposite-type items and return likely matches.
+          Uint8List imageBytes = Uint8List(0);
+          if (_photos.isNotEmpty) {
+            imageBytes = await _photos.first.readAsBytes();
+          }
+
+          final matches = await AiMatchingService.instance.findMatches(
+            itemId: newItemId,
+            imageBytes: imageBytes,
           );
 
-          if (candidates.isNotEmpty) {
-            Uint8List imageBytes = Uint8List(0);
-            if (_photos.isNotEmpty)
-              imageBytes = await _photos.first.readAsBytes();
+          if (matches.isNotEmpty && mounted) {
+            // Pull the full item docs for the matched ids so the dialog can
+            // show titles and let the user open them.
+            final matchIds = matches
+                .map((m) => m['id'])
+                .whereType<String>()
+                .toList();
+            List<ItemModel> matchedItems = [];
+            if (matchIds.isNotEmpty) {
+              final snap = await FirebaseFirestore.instance
+                  .collection('items')
+                  .where(FieldPath.documentId, whereIn: matchIds)
+                  .get();
+              matchedItems = snap.docs.map(ItemModel.fromDoc).toList();
+            }
 
-            final tempItem = ItemModel(
-              id: 'temp',
-              type: _type,
-              title: _title.text,
-              desc: _desc.text,
-              category: _category,
-              tags: tagList,
-              ownerUid: '',
-              postedAt: Timestamp.now(),
-              locationText: '',
-              photos: [],
-              lat: 0,
-              lng: 0,
-              status: '', // Provide an appropriate status value here
-            );
-
-            // B. Call AI
-            final matches = await AiMatchingService.instance.findMatches(
-              newItem: tempItem,
-              imageBytes: imageBytes,
-              candidates: candidates,
-            );
-
-            if (matches.isNotEmpty && mounted) {
-              _showMatchDialog(matches, candidates);
+            if (mounted && matchedItems.isNotEmpty) {
+              _showMatchDialog(matches, matchedItems);
               setState(() => _saving = false);
               return;
             }
