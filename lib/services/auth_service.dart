@@ -171,48 +171,24 @@ class AuthService {
     }
   }
 
-  Future<void> saveUserToken() async {
-    print("🔥 DEBUG: Starting saveUserToken()...");
-
-    try {
-      // Get the current user
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        print("❌ DEBUG: User is NOT logged in. Cannot save token.");
-        return;
-      }
-
-      // Try to get the token
-      String? token = await FirebaseMessaging.instance.getToken();
-
-      // Save it to Firestore
-      if (token != null) {
-        print("⚠️ DEBUG: Token was null. Waiting for Firebase to wake up...");
-        await Future.delayed(const Duration(seconds: 3));
-        token = await FirebaseMessaging.instance.getToken();
-      }
-
-      // If it is still null, give up
-      if (token == null) {
-        print("❌ DEBUG: Failed to get Token after retry. Check Internet.");
-        return;
-      }
-
-      print("✅ DEBUG: Got Device Token: $token");
-
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'fcmToken': token,
-        'lastActive': DateTime.now(),
-      }, SetOptions(merge: true));
-
-      print("🚀 DEBUG: SUCCESS! Token written to Firestore.");
-    } catch (e) {
-      print("☠️ DEBUG: CRASH inside saveUserToken: $e");
-    }
-  }
-
   // ignore: unused_element
   Future<void> logout() async {
+    // Remove this device's FCM token from the user doc so future
+    // notifications don't keep being sent to a phone that's signed out.
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        final token = await FirebaseMessaging.instance.getToken();
+        if (token != null) {
+          await _users.doc(user.uid).update({
+            'fcmTokens': FieldValue.arrayRemove([token]),
+          });
+        }
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {
+        // Best-effort cleanup; don't block sign-out if Firestore is unreachable.
+      }
+    }
     await _auth.signOut();
   }
 
