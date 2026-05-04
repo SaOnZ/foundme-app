@@ -569,7 +569,7 @@ class ProfilePage extends StatelessWidget {
       case 'active':
         statusColor = Colors.blue;
         break;
-      case 'resolved':
+      case 'closed':
         statusColor = Colors.green;
         break;
       case 'rejected':
