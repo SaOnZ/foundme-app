@@ -223,22 +223,26 @@ export const onNewClaimV2 = onDocumentCreated("claims/{claimId}", async (event) 
     }
     const tokens: string[] = ownerData.fcmTokens;
 
-    // 4. Build the notification payload
-    const payload: admin.messaging.MessagingPayload = {
+    // 4. Send to all of the owner's tokens via the FCM v1 multicast API.
+    const response = await messaging.sendEachForMulticast({
+      tokens,
       notification: {
         title: "New Claim Request!",
         body: `${claimerName} has sent a claim for one of your items.`,
-        clickAction: "FLUTTER_NOTIFICATION_CLICK",
       },
       data: {
         claimId: event.params.claimId,
         type: "claim",
       },
-    };
-
-    // 5. Send the notification to all of the owner's tokens
-    await messaging.sendToDevice(tokens, payload);
-    logger.log(`Successfully sent 'New Claim' notification to ${ownerUid}`);
+      android: {
+        priority: "high",
+        notification: { channelId: "high_importance_channel" },
+      },
+    });
+    logger.log(
+      `Sent 'New Claim' to ${ownerUid}: ` +
+        `${response.successCount}/${tokens.length} delivered.`,
+    );
   } catch (error) {
     logger.error("Error sending 'New Claim' notification:", error);
   }
@@ -288,22 +292,26 @@ export const onNewMessageV2 = onDocumentCreated("messages/{messageId}", async (e
     }
     const tokens: string[] = recipientData.fcmTokens;
 
-    // 5. Build the notification payload
-    const payload: admin.messaging.MessagingPayload = {
+    // 5. Send via the FCM v1 multicast API.
+    const response = await messaging.sendEachForMulticast({
+      tokens,
       notification: {
         title: `New Message from ${senderName}`,
-        body: message.text, // Use the actual message text
-        clickAction: "FLUTTER_NOTIFICATION_CLICK",
+        body: message.text,
       },
       data: {
-        claimId:  String(claimId),
+        claimId: String(claimId),
         type: "chat",
       },
-    };
-
-    // 6. Send the notification
-    await messaging.sendToDevice(tokens, payload);
-    logger.log(`Successfully sent 'New Message' notification to ${recipientUid}`);
+      android: {
+        priority: "high",
+        notification: { channelId: "high_importance_channel" },
+      },
+    });
+    logger.log(
+      `Sent 'New Message' to ${recipientUid}: ` +
+        `${response.successCount}/${tokens.length} delivered.`,
+    );
   } catch (error) {
     logger.error("Error sending 'New Message' notification:", error);
   }
