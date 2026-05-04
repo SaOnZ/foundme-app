@@ -159,7 +159,7 @@ export const disableUser = onCall(async (request) => {
   if (callerDoc.data()?.role !== "admin") {
     throw new HttpsError(
       "permission-denied",
-      "You must be and admin to perform this action.",
+      "You must be an admin to perform this action.",
     );
   }
 
@@ -188,7 +188,7 @@ export const disableUser = onCall(async (request) => {
     return { success: true, message: "User has been disabled." };
   } catch (error) {
     logger.error(`Error disabling user ${uidToDisable}:`, error);
-    throw new HttpsError("internal", "An error occured while disabling the user.");
+    throw new HttpsError("internal", "An error occurred while disabling the user.");
   }
 })
 
