@@ -30,14 +30,8 @@ void main() async {
   }
   try {
     await dotenv.load(fileName: ".env");
-    print("✅ .env loaded successfully!");
-    print("🔍 Keys found: ${dotenv.env.keys}"); // This will list valid keys
-    print(
-      "🔍 GEMINI Key: ${dotenv.env['GEMINI_API_KEY']}",
-    ); // Should print the key
-    await AuthService.instance.saveUserToken();
   } catch (e) {
-    print("❌ Failed to load .env: $e");
+    print("Failed to load .env: $e");
   }
 
   await NotificationService.instance.init();

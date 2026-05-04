@@ -45,14 +45,17 @@ class NotificationService {
 
   Future<void> _saveTokenToFirestore(String token) async {
     final uid = AuthService.instance.currentUser?.uid;
-    if (uid == null) return; //Not logged in
+    if (uid == null) return;
 
     try {
+      // Add the new token to the array and drop the legacy singular field
+      // in the same write, so older docs migrate themselves on the next save.
       await _db.collection('users').doc(uid).set({
         'fcmTokens': FieldValue.arrayUnion([token]),
+        'fcmToken': FieldValue.delete(),
       }, SetOptions(merge: true));
     } catch (e) {
-      // Handle error
+      print('Failed to save FCM token: $e');
     }
   }
 
