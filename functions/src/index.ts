@@ -131,7 +131,7 @@ export const submitReview = onCall(async (request) => {
       });
     });
 
-    logger.log('Review submitted for user ${recipientUid} by ${callerUid}.');
+    logger.log(`Review submitted for user ${recipientUid} by ${callerUid}.`);
     return { success: true, message: "Review submitted!" };
   } catch (error) {
     logger.error("Error submitting review:", error);
@@ -184,10 +184,10 @@ export const disableUser = onCall(async (request) => {
       role: "disabled",
     });
 
-    logger.log('Admin: ${callerUid} successfully disabled user ${uidToDisable}');
+    logger.log(`Admin: ${callerUid} successfully disabled user ${uidToDisable}`);
     return { success: true, message: "User has been disabled." };
   } catch (error) {
-    logger.error('Error disabling user ${uidToDisable}:', error);
+    logger.error(`Error disabling user ${uidToDisable}:`, error);
     throw new HttpsError("internal", "An error occured while disabling the user.");
   }
 })
