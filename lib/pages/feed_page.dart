@@ -37,6 +37,11 @@ class _FeedPageState extends State<FeedPage>
   String type = 'ALL';
   final types = const ['ALL', 'Lost', 'Found'];
 
+  // How many items to request from the feed; grows when the user taps
+  // "Load more" so the query stays bounded but isn't permanently capped at 50.
+  int _limit = 50;
+  static const _pageSize = 50;
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -93,11 +98,28 @@ class _FeedPageState extends State<FeedPage>
               ],
             ),
           ),
+          // Lost / Found type filter (previously a dead, UI-less field).
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(
+              children: types.map((t) {
+                final selected = type == t;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(t == 'ALL' ? 'All' : t),
+                    selected: selected,
+                    onSelected: (_) => setState(() => type = t),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
           const SizedBox(height: 8),
           // Feed
           Expanded(
             child: StreamBuilder<List<ItemModel>>(
-              stream: ItemService.instance.latestActive(),
+              stream: ItemService.instance.latestActive(limit: _limit),
               builder: (context, snap) {
                 if (snap.hasError) {
                   return Center(child: Text('Error: ${snap.error}'));
@@ -106,6 +128,8 @@ class _FeedPageState extends State<FeedPage>
                   return const Center(child: CircularProgressIndicator());
                 }
                 var items = snap.data!;
+                // If the raw page came back full, there may be more to load.
+                final canLoadMore = items.length >= _limit;
 
                 // Client-side filters (fine for campus-scale data)
                 if (type != 'ALL') {
@@ -117,20 +141,16 @@ class _FeedPageState extends State<FeedPage>
                   items = items.where((it) => it.category == category).toList();
                 }
                 if (q.isNotEmpty) {
-                  items = items.where((it) {
-                    final hay = '${it.title} ${it.desc} ${it.tags.join(" ")}'
-                        .toLowerCase();
-                    return hay.contains(q);
-                  }).toList();
+                  // Uses the per-item cached searchBlob so we don't rebuild a
+                  // lowercased string for every item on every keystroke/compare.
+                  items = items
+                      .where((it) => it.searchBlob.contains(q))
+                      .toList();
                   int score(String hay) =>
                       (hay.startsWith(q) ? 2 : 0) + (hay.contains(q) ? 1 : 0);
-                  items.sort((a, b) {
-                    final ha = '${a.title} ${a.desc} ${a.tags.join(" ")}'
-                        .toLowerCase();
-                    final hb = '${b.title} ${b.desc} ${b.tags.join(" ")}'
-                        .toLowerCase();
-                    return score(hb).compareTo(score(ha));
-                  });
+                  items.sort(
+                    (a, b) => score(b.searchBlob).compareTo(score(a.searchBlob)),
+                  );
                 }
 
                 if (items.isEmpty) {
@@ -141,10 +161,24 @@ class _FeedPageState extends State<FeedPage>
 
                 return ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  itemCount: items.length,
+                  itemCount: items.length + (canLoadMore ? 1 : 0),
                   // ignore: unnecessary_underscores
                   separatorBuilder: (_, __) => const SizedBox(height: 0),
                   itemBuilder: (_, i) {
+                    // Trailing "Load more" row.
+                    if (i >= items.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        child: OutlinedButton(
+                          onPressed: () =>
+                              setState(() => _limit += _pageSize),
+                          child: const Text('Load more'),
+                        ),
+                      );
+                    }
                     final it = items[i];
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),

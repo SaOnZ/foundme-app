@@ -488,11 +488,40 @@ class _AddItemPageState extends State<AddItemPage> {
     );
   }
 
-  String? _vTitle(String? v) =>
-      (v == null || v.trim().length < 3) ? 'Enter title (min 3 chars)' : null;
-  String? _vDesc(String? v) => (v == null || v.trim().length < 10)
-      ? 'Enter description (min 10 chars)'
-      : null;
+  // Upper bounds keep a single item doc well under Firestore's 1 MB limit and
+  // stop pathological pastes (M11).
+  static const _maxTitle = 100;
+  static const _maxDesc = 1000;
+  static const _maxTags = 15;
+  static const _maxTagLen = 30;
+
+  String? _vTitle(String? v) {
+    final t = v?.trim() ?? '';
+    if (t.length < 3) return 'Enter title (min 3 chars)';
+    if (t.length > _maxTitle) return 'Title is too long (max $_maxTitle)';
+    return null;
+  }
+
+  String? _vDesc(String? v) {
+    final t = v?.trim() ?? '';
+    if (t.length < 10) return 'Enter description (min 10 chars)';
+    if (t.length > _maxDesc) return 'Description is too long (max $_maxDesc)';
+    return null;
+  }
+
+  String? _vTags(String? v) {
+    if (v == null || v.trim().isEmpty) return null; // tags are optional
+    final list = v
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (list.length > _maxTags) return 'Too many tags (max $_maxTags)';
+    if (list.any((t) => t.length > _maxTagLen)) {
+      return 'Each tag must be $_maxTagLen characters or fewer';
+    }
+    return null;
+  }
 
   InputDecoration _inputDecoration(String label, IconData icon) {
     return InputDecoration(
@@ -656,6 +685,7 @@ class _AddItemPageState extends State<AddItemPage> {
 
               TextFormField(
                 controller: _title,
+                maxLength: _maxTitle,
                 decoration: _inputDecoration('Item Title', Icons.title),
                 validator: _vTitle,
               ),
@@ -677,6 +707,7 @@ class _AddItemPageState extends State<AddItemPage> {
               TextFormField(
                 controller: _desc,
                 maxLines: 3,
+                maxLength: _maxDesc,
                 decoration: _inputDecoration(
                   'Description',
                   Icons.description_outlined,
@@ -691,6 +722,7 @@ class _AddItemPageState extends State<AddItemPage> {
                   'Tags (e.g. Blue, Wallet)',
                   Icons.tag,
                 ),
+                validator: _vTags,
               ),
               const SizedBox(height: 16),
 
@@ -700,10 +732,15 @@ class _AddItemPageState extends State<AddItemPage> {
                   Expanded(
                     child: TextFormField(
                       controller: _locationController,
-                      decoration: _inputDecoration(
-                        'Location (e.g. Library)',
-                        Icons.place_outlined,
-                      ),
+                      maxLength: 100,
+                      decoration:
+                          _inputDecoration(
+                            'Location label (e.g. Library)',
+                            Icons.place_outlined,
+                          ).copyWith(
+                            helperText: 'A label for the pin you set on the map',
+                            counterText: '',
+                          ),
                     ),
                   ),
                   const SizedBox(width: 8),

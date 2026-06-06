@@ -17,6 +17,10 @@ class ItemModel {
   final String status;
   final Timestamp postedAt;
 
+  /// Lowercased "title desc tags" blob, computed once per instance so the feed
+  /// search/sort doesn't rebuild it on every keystroke and every sort compare.
+  late final String searchBlob = '$title $desc ${tags.join(" ")}'.toLowerCase();
+
   ItemModel({
     required this.id,
     required this.ownerUid,

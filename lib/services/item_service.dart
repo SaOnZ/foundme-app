@@ -108,7 +108,7 @@ class ItemService {
   //Define the time limit
   final Duration _expiryDuration = const Duration(days: 90);
 
-  Stream<List<ItemModel>> latestActive() {
+  Stream<List<ItemModel>> latestActive({int limit = 50}) {
     // Calculate the cutoff data (90 days ago)
     final DateTime cutoff = DateTime.now().subtract(_expiryDuration);
     final Timestamp cutoffTs = Timestamp.fromDate(cutoff);
@@ -117,7 +117,7 @@ class ItemService {
         .where('status', isEqualTo: ItemStatus.active)
         .where('postedAt', isGreaterThan: cutoffTs) // only get newer items
         .orderBy('postedAt', descending: true)
-        .limit(50)
+        .limit(limit)
         .snapshots()
         .map(
           (s) => s.docs
@@ -133,13 +133,14 @@ class ItemService {
         );
   }
 
-  Stream<List<ItemModel>> allActiveItems() {
+  Stream<List<ItemModel>> allActiveItems({int limit = 200}) {
     final DateTime cutoff = DateTime.now().subtract(_expiryDuration);
     final Timestamp cutoffTs = Timestamp.fromDate(cutoff);
     return _items
         .where('status', isEqualTo: ItemStatus.active)
         .where('postedAt', isGreaterThan: cutoffTs)
         .orderBy('postedAt', descending: true)
+        .limit(limit) // cap map reads instead of streaming the whole collection
         .snapshots()
         .map(
           (s) => s.docs
