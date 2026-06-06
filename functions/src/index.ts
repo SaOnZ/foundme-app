@@ -69,16 +69,20 @@ export const submitReview = onCall(async (request) => {
       "You must be logged in to leave a review.",
     );
   }
-  if (!claimId || !roleToReview || !rating) {
+  if (!claimId || !roleToReview) {
     throw new HttpsError(
       "invalid-argument",
-      "Missing required fields (claimId, roleToReview, rating).",
+      "Missing required fields (claimId, roleToReview).",
     );
   }
-  if (rating < 0.5 || rating > 5) {
+  // Validate rating is a real number in range. A non-numeric value (e.g. a
+  // string) would otherwise slip past `< 0.5 || > 5` and corrupt the stored
+  // average with NaN.
+  if (typeof rating !== "number" || isNaN(rating) ||
+      rating < 0.5 || rating > 5) {
     throw new HttpsError(
       "invalid-argument",
-      "Rating must be between 0.5 and 5.",
+      "Rating must be a number between 0.5 and 5.",
     );
   }
 
@@ -98,6 +102,16 @@ export const submitReview = onCall(async (request) => {
     throw new HttpsError(
       "permission-denied",
       "You are not authorized to review this claim.",
+    );
+  }
+
+  // 4b. The claim must actually have reached a completed state. Otherwise a
+  // user could spam-create pending claims on any item and review-bomb the
+  // owner without any real handover taking place.
+  if (claim.status !== "accepted" && claim.status !== "closed") {
+    throw new HttpsError(
+      "failed-precondition",
+      "You can only review once the claim has been accepted or completed.",
     );
   }
 
@@ -589,16 +603,14 @@ export const verifyMatricCard = onCall(
       };
     }
 
-    const [downloadUrl] = await file.getSignedUrl({
-      action: "read",
-      expires: "01-01-2100",
-    });
-
-    // Write sensitive fields to the admin-only verifications collection.
+    // Store only the storage PATH, not a signed URL. The previous code minted
+    // a URL valid until 01-01-2100 — effectively a permanent public bearer
+    // link to a student ID. Admins fetch a short-lived URL on demand via
+    // getMatricCardUrl instead.
     await db.collection("verifications").doc(callerUid).set({
       matricNumber: parsed.matric_no,
       matricName: parsed.name || null,
-      matricCardUrl: downloadUrl,
+      matricCardPath: filePath,
       verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -617,6 +629,43 @@ export const verifyMatricCard = onCall(
     return { success: true };
   },
 );
+
+// getMatricCardUrl — admin-only. Generates a short-lived (15 min) signed URL
+// to a user's matric card on demand, so we never persist a long-lived link to
+// sensitive ID images.
+export const getMatricCardUrl = onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new HttpsError("unauthenticated", "You must be logged in.");
+  }
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  if (callerDoc.data()?.role !== "admin") {
+    throw new HttpsError(
+      "permission-denied",
+      "You must be an admin to view verification documents.",
+    );
+  }
+
+  const { uid } = request.data;
+  if (!uid) {
+    throw new HttpsError("invalid-argument", "No 'uid' provided.");
+  }
+
+  // Prefer the stored path; fall back to the deterministic location.
+  const verifDoc = await db.collection("verifications").doc(uid).get();
+  const path =
+    (verifDoc.data()?.matricCardPath as string | undefined) ??
+    `matric_cards/${uid}.jpg`;
+
+  const [url] = await storage
+    .bucket()
+    .file(path)
+    .getSignedUrl({
+      action: "read",
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+    });
+  return { url };
+});
 
 // findMatchingItems — given the just-created item, queries Firestore for
 // candidate items of the opposite type+category and asks Gemini which
