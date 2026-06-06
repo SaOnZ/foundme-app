@@ -39,14 +39,23 @@ class ItemService {
   }
 
   Future<void> deleteItem(ItemModel it) async {
-    await _items.doc(it.id).delete();
+    // Delete the storage objects FIRST, while we still have the photo URLs from
+    // the doc. If we deleted the doc first and then crashed, the files would be
+    // orphaned with no record pointing at them. Photo-delete failures are
+    // logged (not silently swallowed) but don't block removing the doc.
     for (final url in it.photos) {
+      if (url.isEmpty) continue;
       try {
         await _storage.refFromURL(url).delete();
-      } catch (_) {
-        // ignore errors
+      } catch (e) {
+        LogService.instance.logActivity(
+          'Photo delete failed',
+          'Could not delete a photo for item ${it.id}: $e',
+          'error',
+        );
       }
     }
+    await _items.doc(it.id).delete();
   }
 
   Future<List<String>> _uploadPhotos(String itemId, List<XFile> files) async {

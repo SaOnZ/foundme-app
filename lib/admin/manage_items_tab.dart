@@ -113,9 +113,30 @@ class ManageItemsTab extends StatelessWidget {
                 icon: const Icon(Icons.more_vert),
                 onSelected: (value) {
                   if (value == 'delete') _showAdminDeleteDialog(context, item);
-                  if (value == 'close') ItemService.instance.closeItem(item.id);
-                  if (value == 'active')
-                    ItemService.instance.reopenItem(item.id);
+                  if (value == 'close') {
+                    _confirmStatusChange(
+                      context,
+                      item: item,
+                      title: 'Force close this post?',
+                      body:
+                          '"${item.title}" will be archived and removed from '
+                          'the feed.',
+                      confirmLabel: 'Force close',
+                      action: () => ItemService.instance.closeItem(item.id),
+                      successMsg: 'Post closed.',
+                    );
+                  }
+                  if (value == 'active') {
+                    _confirmStatusChange(
+                      context,
+                      item: item,
+                      title: 'Re-activate this post?',
+                      body: '"${item.title}" will be visible in the feed again.',
+                      confirmLabel: 'Re-activate',
+                      action: () => ItemService.instance.reopenItem(item.id),
+                      successMsg: 'Post re-activated.',
+                    );
+                  }
                 },
                 itemBuilder: (ctx) => [
                   if (status == ItemStatus.active ||
@@ -184,6 +205,51 @@ class ManageItemsTab extends StatelessWidget {
         return list;
       },
     );
+  }
+
+  /// Confirm, then run a status change (force-close / re-activate) with
+  /// user-facing success/error feedback instead of fire-and-forget (M18).
+  Future<void> _confirmStatusChange(
+    BuildContext context, {
+    required ItemModel item,
+    required String title,
+    required String body,
+    required String confirmLabel,
+    required Future<void> Function() action,
+    required String successMsg,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await action();
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(successMsg)));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Action failed. Please try again.')),
+        );
+      }
+    }
   }
 
   void _showAdminDeleteDialog(BuildContext context, ItemModel item) {

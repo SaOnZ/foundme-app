@@ -14,6 +14,14 @@ class ApprovalsTab extends StatelessWidget {
     return StreamBuilder<List<ItemModel>>(
       stream: ItemService.instance.getPendingApprovalItems(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text(
+              'Could not load pending items.',
+              style: TextStyle(color: Colors.red),
+            ),
+          );
+        }
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
         final items = snapshot.data!;
