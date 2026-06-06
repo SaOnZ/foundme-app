@@ -90,26 +90,33 @@ class ClaimsInboxPage extends StatelessWidget {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 elevation: 2,
-                child: StreamBuilder<ItemModel>(
-                  stream: ItemService.instance.getItemStream(c.itemId),
+                child: FutureBuilder<ItemModel?>(
+                  future: ItemService.instance.getItemOnce(c.itemId),
                   builder: (context, itemSnap) {
                     String itemName = 'Loading item...';
                     String itemPhotoUrl = '';
-                    if (itemSnap.hasData) {
-                      itemName = itemSnap.data!.title;
-                      if (itemSnap.data!.photos.isNotEmpty) {
-                        itemPhotoUrl = itemSnap.data!.photos.first;
+                    final item = itemSnap.data;
+                    if (item != null) {
+                      itemName = item.title;
+                      if (item.photos.isNotEmpty) {
+                        itemPhotoUrl = item.photos.first;
                       }
+                    } else if (itemSnap.connectionState ==
+                        ConnectionState.done) {
+                      itemName = 'Item unavailable';
                     }
 
-                    return StreamBuilder<UserModel?>(
-                      stream: AuthService.instance.userStream(
-                        uid: c.claimerUid,
+                    return FutureBuilder<UserModel?>(
+                      future: AuthService.instance.getUserProfileCached(
+                        c.claimerUid,
                       ),
                       builder: (context, userSnap) {
                         String claimerName = 'Loading user...';
-                        if (userSnap.hasData) {
-                          claimerName = userSnap.data?.name ?? 'Unknow User';
+                        if (userSnap.data != null) {
+                          claimerName = userSnap.data?.name ?? 'Unknown User';
+                        } else if (userSnap.connectionState ==
+                            ConnectionState.done) {
+                          claimerName = 'Unknown User';
                         }
 
                         return ListTile(

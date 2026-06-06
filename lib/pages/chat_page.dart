@@ -53,6 +53,55 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
+  /// Opens the rating dialog for the other party. [role] is 'claimer' (owner
+  /// rates the claimer) or 'owner' (claimer rates the owner).
+  Future<void> _rate(String role, String otherUid) async {
+    final profile = otherUid.isEmpty
+        ? null
+        : await AuthService.instance.getUserProfileCached(otherUid);
+    if (!mounted) return;
+    final name =
+        profile?.name ?? (role == 'claimer' ? 'the Claimer' : 'the Owner');
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => RatingDialog(
+        claimId: widget.claimId,
+        roleToReview: role,
+        personToReviewName: name,
+      ),
+    );
+  }
+
+  /// Owner marks the claim resolved (closes claim + item), then is prompted to
+  /// rate the claimer — but only if they haven't already reviewed.
+  Future<void> _resolve(Map<String, dynamic> data) async {
+    if (_actionBusy) return;
+    setState(() => _actionBusy = true);
+    try {
+      await ClaimService.instance.closeClaimAndItem(
+        widget.claimId,
+        (data['itemId'] ?? '') as String,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Closed ✔')));
+      final ownerReviewed = (data['ownerHasReviewed'] ?? false) as bool;
+      if (!ownerReviewed) {
+        await _rate('claimer', (data['claimerUid'] ?? '') as String);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not resolve. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
   /// Runs an owner claim action (accept/decline) guarding against double-tap
   /// and surfacing a user-facing message on success/failure.
   Future<void> _runClaimAction(
@@ -213,44 +262,25 @@ class _ChatPageState extends State<ChatPage> {
                 IconButton(
                   tooltip: 'Mark resolved',
                   icon: const Icon(Icons.check_circle_outline),
-                  onPressed: () async {
-                    try {
-                      await ClaimService.instance.closeClaimAndItem(
-                        widget.claimId,
-                        data['itemId'],
-                      );
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Closed ✔')),
-                      );
-
-                      final claimerUid = data['claimerUid'] as String?;
-                      final claimerProfile = claimerUid == null
-                          ? null
-                          : await AuthService.instance
-                                .getUserProfile(claimerUid);
-                      final claimerName =
-                          claimerProfile?.name ?? 'the Claimer';
-
-                      if (!context.mounted) return;
-
-                      showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (_) => RatingDialog(
-                          claimId: widget.claimId,
-                          roleToReview: 'claimer',
-                          personToReviewName: claimerName,
-                        ),
-                      );
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      }
-                    }
-                  },
+                  onPressed: _actionBusy ? null : () => _resolve(data),
+                ),
+              // Persistent rating entry once the claim is closed, so a
+              // dismissed rating dialog can still be completed later.
+              if (status == 'closed' &&
+                  isOwner &&
+                  !((data['ownerHasReviewed'] ?? false) as bool))
+                TextButton(
+                  onPressed: () =>
+                      _rate('claimer', (data['claimerUid'] ?? '') as String),
+                  child: const Text('Rate claimer'),
+                ),
+              if (status == 'closed' &&
+                  !isOwner &&
+                  !((data['claimerHasReviewed'] ?? false) as bool))
+                TextButton(
+                  onPressed: () =>
+                      _rate('owner', (data['ownerUid'] ?? '') as String),
+                  child: const Text('Rate owner'),
                 ),
             ],
           ),

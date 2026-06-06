@@ -154,6 +154,22 @@ class ItemService {
         );
   }
 
+  // One-shot item cache for list rows (claims inbox / my claims). Avoids
+  // opening a realtime listener per row and refetching on every rebuild.
+  final Map<String, Future<ItemModel?>> _itemCache = {};
+
+  /// Fetches an item once and memoizes the future, so repeated calls for the
+  /// same id (e.g. across list rebuilds) reuse a single read.
+  Future<ItemModel?> getItemOnce(String id) {
+    return _itemCache.putIfAbsent(
+      id,
+      () => _items
+          .doc(id)
+          .get()
+          .then((d) => d.exists ? ItemModel.fromDoc(d) : null),
+    );
+  }
+
   /// Gets a stream for a single item from its ID.
   ///
   /// Skips snapshots for a deleted/non-existent doc so consumers never receive
@@ -166,9 +182,13 @@ class ItemService {
         .map(ItemModel.fromDoc);
   }
 
-  Stream<List<ItemModel>> adminGetAllItems() {
+  // Bounded so the admin "All Items" view can't download the entire
+  // collection. [limit] caps the most-recent items returned; see the
+  // "showing latest N" note in ManageItemsTab. (Follow-up: startAfter paging.)
+  Stream<List<ItemModel>> adminGetAllItems({int limit = 200}) {
     return _items
         .orderBy('postedAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map(
           (s) => s.docs

@@ -52,6 +52,15 @@ class AuthService {
     });
   }
 
+  // One-shot profile cache for list rows. Avoids a realtime listener per row.
+  final Map<String, Future<UserModel?>> _profileCache = {};
+
+  /// Memoized variant of [getUserProfile] for use in list builders, so a name
+  /// lookup isn't refetched on every rebuild.
+  Future<UserModel?> getUserProfileCached(String uid) {
+    return _profileCache.putIfAbsent(uid, () => getUserProfile(uid));
+  }
+
   /// Fetches a user's profile data once from Firestore.
   Future<UserModel?> getUserProfile(String uid) async {
     try {
@@ -63,9 +72,12 @@ class AuthService {
     }
   }
 
-  Stream<List<UserModel>> adminGetAllUsers() {
+  // Bounded so the admin "Users" view can't download the entire users
+  // collection. (Follow-up: add search + startAfter pagination.)
+  Stream<List<UserModel>> adminGetAllUsers({int limit = 200}) {
     return _users
         .orderBy('name')
+        .limit(limit)
         .snapshots()
         .map((s) => s.docs.map(UserModel.fromDoc).toList());
   }

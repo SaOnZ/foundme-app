@@ -108,121 +108,13 @@ class ApprovalsTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
 
-                        // User Matric Fetcher.
-                        // Pulls the public name from /users and the
-                        // sensitive matric fields from the admin-only
-                        // /verifications collection in parallel.
-                        FutureBuilder<List<DocumentSnapshot>>(
-                          future: Future.wait([
-                            FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(item.ownerUid)
-                                .get(),
-                            FirebaseFirestore.instance
-                                .collection('verifications')
-                                .doc(item.ownerUid)
-                                .get(),
-                          ]),
-                          builder: (context, userSnap) {
-                            if (!userSnap.hasData)
-                              return const LinearProgressIndicator();
-                            final userData =
-                                userSnap.data![0].data() as Map<String, dynamic>?;
-                            final verifData =
-                                userSnap.data![1].data() as Map<String, dynamic>?;
-                            final matricUrl = verifData?['matricCardUrl'];
-                            final name = userData?['name'] ?? 'Unknown';
-                            final matricNo =
-                                verifData?['matricNumber'] ?? 'N/A';
-
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade200),
-                              ),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: Colors.blue[50],
-                                    child: const Icon(
-                                      Icons.person,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        Text(
-                                          matricNo,
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (matricUrl != null)
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.badge, size: 16),
-                                      label: const Text("View ID"),
-                                      onPressed: () => showDialog(
-                                        context: context,
-                                        builder: (_) => Dialog(
-                                          child: CachedNetworkImage(
-                                            imageUrl: matricUrl,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                        // User Matric Fetcher — fetches once and handles
+                        // missing/errored verification data.
+                        _VerificationInfo(ownerUid: item.ownerUid),
                         const SizedBox(height: 20),
 
-                        // Action Buttons
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.close),
-                                label: const Text("Reject"),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                  side: const BorderSide(color: Colors.red),
-                                ),
-                                onPressed: () => ItemService.instance
-                                    .setItemStatus(item.id, 'rejected'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                icon: const Icon(Icons.check),
-                                label: const Text("Approve"),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                ),
-                                onPressed: () => ItemService.instance
-                                    .setItemStatus(item.id, 'active'),
-                              ),
-                            ),
-                          ],
-                        ),
+                        // Action Buttons (with confirmation + error handling)
+                        _ApprovalActions(itemId: item.id),
                       ],
                     ),
                   ),
@@ -232,6 +124,224 @@ class ApprovalsTab extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// Fetches the poster's public name (/users) and sensitive matric data
+/// (/verifications) once in initState — so it doesn't refetch on every
+/// ExpansionTile rebuild — and surfaces load errors / missing verification.
+class _VerificationInfo extends StatefulWidget {
+  final String ownerUid;
+  const _VerificationInfo({required this.ownerUid});
+
+  @override
+  State<_VerificationInfo> createState() => _VerificationInfoState();
+}
+
+class _VerificationInfoState extends State<_VerificationInfo> {
+  late final Future<List<DocumentSnapshot>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = Future.wait([
+      FirebaseFirestore.instance.collection('users').doc(widget.ownerUid).get(),
+      FirebaseFirestore.instance
+          .collection('verifications')
+          .doc(widget.ownerUid)
+          .get(),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<DocumentSnapshot>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return const Text(
+            'Could not load verification details.',
+            style: TextStyle(color: Colors.red, fontSize: 12),
+          );
+        }
+        if (!snap.hasData) return const LinearProgressIndicator();
+
+        final userData = snap.data![0].data() as Map<String, dynamic>?;
+        final verifData = snap.data![1].data() as Map<String, dynamic>?;
+        final matricUrl = verifData?['matricCardUrl'] as String?;
+        final name = userData?['name'] ?? 'Unknown';
+        final matricNo = verifData?['matricNumber'] ?? 'N/A';
+        final missingVerification = verifData == null;
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: missingVerification
+                  ? Colors.orange.shade200
+                  : Colors.grey.shade200,
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.blue[50],
+                child: const Icon(Icons.person, color: Colors.blue),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      matricNo,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    if (missingVerification)
+                      const Text(
+                        '⚠ No verification on file',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+              if (matricUrl != null && matricUrl.isNotEmpty)
+                TextButton.icon(
+                  icon: const Icon(Icons.badge, size: 16),
+                  label: const Text("View ID"),
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (_) => Dialog(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 500),
+                        child: InteractiveViewer(
+                          child: CachedNetworkImage(
+                            imageUrl: matricUrl,
+                            fit: BoxFit.contain,
+                            placeholder: (c, _) => const SizedBox(
+                              height: 200,
+                              child: Center(child: CircularProgressIndicator()),
+                            ),
+                            errorWidget: (c, _, __) => const SizedBox(
+                              height: 200,
+                              child: Center(child: Text('Could not load ID')),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Approve/Reject buttons with a confirmation on reject, an in-flight guard
+/// against double-taps, and user-facing success/error feedback.
+class _ApprovalActions extends StatefulWidget {
+  final String itemId;
+  const _ApprovalActions({required this.itemId});
+
+  @override
+  State<_ApprovalActions> createState() => _ApprovalActionsState();
+}
+
+class _ApprovalActionsState extends State<_ApprovalActions> {
+  bool _busy = false;
+
+  Future<void> _setStatus(String status, String successMsg) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ItemService.instance.setItemStatus(widget.itemId, status);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(successMsg)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Action failed. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _confirmReject() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject this post?'),
+        content: const Text('The poster will not see their item published.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reject', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _setStatus('rejected', 'Post rejected');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_busy) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(8),
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.close),
+            label: const Text("Reject"),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+            ),
+            onPressed: _confirmReject,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.check),
+            label: const Text("Approve"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => _setStatus('active', 'Post approved'),
+          ),
+        ),
+      ],
     );
   }
 }

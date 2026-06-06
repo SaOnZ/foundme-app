@@ -6,7 +6,6 @@ import 'chat_page.dart';
 import '../widgets/rating_dialog.dart';
 import '../models/item.dart';
 import '../services/item_service.dart';
-import '../models/user_model.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class MyClaimsPage extends StatelessWidget {
@@ -114,16 +113,20 @@ class MyClaimsPage extends StatelessWidget {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 elevation: 2,
-                child: StreamBuilder<ItemModel>(
-                  stream: ItemService.instance.getItemStream(c.itemId),
+                child: FutureBuilder<ItemModel?>(
+                  future: ItemService.instance.getItemOnce(c.itemId),
                   builder: (context, itemSnap) {
                     String itemName = 'Loading item...';
                     String itemPhotoUrl = '';
-                    if (itemSnap.hasData) {
-                      itemName = itemSnap.data!.title;
-                      if (itemSnap.data!.photos.isNotEmpty) {
-                        itemPhotoUrl = itemSnap.data!.photos.first;
+                    final item = itemSnap.data;
+                    if (item != null) {
+                      itemName = item.title;
+                      if (item.photos.isNotEmpty) {
+                        itemPhotoUrl = item.photos.first;
                       }
+                    } else if (itemSnap.connectionState ==
+                        ConnectionState.done) {
+                      itemName = 'Item unavailable';
                     }
 
                     return ListTile(
@@ -132,7 +135,7 @@ class MyClaimsPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                         child: CachedNetworkImage(
                           imageUrl: itemPhotoUrl,
-                          width: 59,
+                          width: 50,
                           height: 50,
                           fit: BoxFit.cover,
                           errorWidget: (context, url, error) =>

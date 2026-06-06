@@ -7,6 +7,24 @@ import '../services/log_service.dart';
 class DashboardOverviewTab extends StatelessWidget {
   const DashboardOverviewTab({super.key});
 
+  /// Server-side aggregation counts for the stats cards/pie chart. Far cheaper
+  /// than streaming the whole items collection (billed ~1 read per 1k docs).
+  Future<Map<String, int>> _itemCounts() async {
+    final items = FirebaseFirestore.instance.collection('items');
+    final results = await Future.wait([
+      items.count().get(),
+      items.where('status', isEqualTo: 'pending_approval').count().get(),
+      items.where('type', isEqualTo: 'lost').count().get(),
+      items.where('type', isEqualTo: 'found').count().get(),
+    ]);
+    return {
+      'total': results[0].count ?? 0,
+      'pending': results[1].count ?? 0,
+      'lost': results[2].count ?? 0,
+      'found': results[3].count ?? 0,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -23,18 +41,24 @@ class DashboardOverviewTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('items').snapshots(),
+          FutureBuilder<Map<String, int>>(
+            // Use server-side aggregation counts instead of downloading the
+            // entire items collection and counting client-side every rebuild.
+            future: _itemCounts(),
             builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text(
+                  'Could not load statistics.',
+                  style: TextStyle(color: Colors.red),
+                );
+              }
               if (!snapshot.hasData) return const LinearProgressIndicator();
 
-              final allDocs = snapshot.data!.docs;
-              final total = allDocs.length;
-              final pending = allDocs
-                  .where((d) => d['status'] == 'pending_approval')
-                  .length;
-              final lost = allDocs.where((d) => d['type'] == 'lost').length;
-              final found = allDocs.where((d) => d['type'] == 'found').length;
+              final counts = snapshot.data!;
+              final total = counts['total'] ?? 0;
+              final pending = counts['pending'] ?? 0;
+              final lost = counts['lost'] ?? 0;
+              final found = counts['found'] ?? 0;
 
               // Calculate Percentages safely
               final double lostPercent = total == 0 ? 0 : (lost / total) * 100;

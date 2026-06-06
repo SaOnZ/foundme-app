@@ -32,7 +32,7 @@ class ManageItemsTab extends StatelessWidget {
           );
         }
 
-        return ListView.separated(
+        final list = ListView.separated(
           padding: const EdgeInsets.all(12),
           itemCount: items.length,
           separatorBuilder: (_, __) => const Divider(height: 1),
@@ -153,6 +153,27 @@ class ManageItemsTab extends StatelessWidget {
             );
           },
         );
+
+        // The query is capped (see adminGetAllItems); tell the admin rather
+        // than silently truncating.
+        if (items.length >= 200) {
+          return Column(
+            children: [
+              Container(
+                width: double.infinity,
+                color: Colors.amber.shade100,
+                padding: const EdgeInsets.all(8),
+                child: const Text(
+                  'Showing the latest 200 items.',
+                  style: TextStyle(fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(child: list),
+            ],
+          );
+        }
+        return list;
       },
     );
   }

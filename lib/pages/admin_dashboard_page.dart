@@ -4,22 +4,30 @@ import '../admin/dashboard_overview_tab.dart';
 import '../admin/approvals_tab.dart';
 import '../admin/manage_items_tab.dart';
 import '../admin/manage_users_tab.dart';
+import '../admin/reports_tab.dart';
 
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({super.key});
 
   Future<void> _handleLogout(BuildContext context) async {
-    await AuthService.instance.logout();
-
-    if (context.mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    try {
+      await AuthService.instance.logout();
+      if (context.mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Logout failed. Please try again.')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: const Text(
@@ -50,6 +58,7 @@ class AdminDashboardPage extends StatelessWidget {
               Tab(icon: Icon(Icons.verified_user_outlined), text: 'Approvals'),
               Tab(icon: Icon(Icons.inventory_2_outlined), text: 'All Items'),
               Tab(icon: Icon(Icons.people_outline), text: 'Users'),
+              Tab(icon: Icon(Icons.flag_outlined), text: 'Reports'),
             ],
           ),
         ),
@@ -60,6 +69,7 @@ class AdminDashboardPage extends StatelessWidget {
             ApprovalsTab(),
             ManageItemsTab(),
             ManageUsersTab(),
+            ReportsTab(),
           ],
         ),
       ),
