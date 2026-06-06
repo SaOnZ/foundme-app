@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'feed_page.dart';
 import 'add_item_page.dart';
-import 'claims_inbox_page.dart';
-import 'my_claims_page.dart';
 import 'profile_page.dart';
 import '../services/notification_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';

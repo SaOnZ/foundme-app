@@ -31,9 +31,12 @@ service firebase.storage {
     }
 
     // Profile pictures: profile_pictures/{uid}/...
+    // Require a real (non-anonymous) user — guests have no profile (L22).
     match /profile_pictures/{uid}/{file=**} {
       allow read: if isSignedIn();
-      allow write: if request.auth.uid == uid && isImageUnder(5 * 1024 * 1024);
+      allow write: if isUser()
+        && request.auth.uid == uid
+        && isImageUnder(5 * 1024 * 1024);
     }
 
     // Item photos: items/{ownerUid}/{itemId}/{filename}

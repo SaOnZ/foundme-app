@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../models/item.dart';
-import '../models/user_model.dart';
 
 class FeedItemCard extends StatelessWidget {
   final ItemModel item;
@@ -18,7 +16,7 @@ class FeedItemCard extends StatelessWidget {
     final String typeText = isLost ? 'LOST' : 'FOUND';
 
     // Calculate time ago
-    final DateTime date = item.postedAt?.toDate() ?? DateTime.now();
+    final DateTime date = item.postedAt.toDate();
     final String timeString = timeago.format(date, locale: 'en_short');
 
     return GestureDetector(
@@ -30,7 +28,7 @@ class FeedItemCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 15,
               offset: const Offset(0, 5),
             ),
@@ -87,7 +85,7 @@ class FeedItemCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: typeColor.withOpacity(0.4),
+                          color: typeColor.withValues(alpha: 0.4),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),

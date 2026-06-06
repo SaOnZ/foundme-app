@@ -238,7 +238,12 @@ export const submitReview = onCall(async (request) => {
 // 1. Get the caller's ID and the target's ID
 export const disableUser = onCall(async (request) => {
   const callerUid = request.auth?.uid;
-  const { uid: uidToDisable } = request.data;
+  // `disabled` defaults to true (disable); pass false to re-enable/unban (L14).
+  const { uid: uidToDisable, disabled: rawDisabled } = request.data as {
+    uid?: string;
+    disabled?: boolean;
+  };
+  const disabled = rawDisabled === false ? false : true;
 
   // 2. Security check: must be authenticated
   if (!callerUid) {
@@ -265,24 +270,28 @@ export const disableUser = onCall(async (request) => {
   }
 
   try {
-    // 5. Disable the user in Firebase Authentication (blocks login).
-    await admin.auth().updateUser(uidToDisable, {
-      disabled: true,
-    });
+    // 5. Toggle the user in Firebase Authentication (disabled blocks login).
+    await admin.auth().updateUser(uidToDisable, { disabled });
 
     // 6. Mirror the flag onto the user doc so the UI can render a banned
-    //    badge. We deliberately do NOT touch `role` — overwriting it would
-    //    erase admin status and is unnecessary since auth.disabled already
-    //    blocks sign-in.
-    await db.collection("users").doc(uidToDisable).update({
-      disabled: true,
-    });
+    //    badge. set(merge) instead of update() so a missing doc doesn't throw
+    //    after the auth change already applied (L21). We deliberately do NOT
+    //    touch `role`.
+    await db.collection("users").doc(uidToDisable).set(
+      { disabled },
+      { merge: true },
+    );
 
-    logger.log(`Admin ${callerUid} disabled user ${uidToDisable}`);
-    return { success: true, message: "User has been disabled." };
+    logger.log(
+      `Admin ${callerUid} ${disabled ? "disabled" : "enabled"} user ${uidToDisable}`,
+    );
+    return {
+      success: true,
+      message: disabled ? "User has been disabled." : "User has been re-enabled.",
+    };
   } catch (error) {
-    logger.error(`Error disabling user ${uidToDisable}:`, error);
-    throw new HttpsError("internal", "An error occured while disabling the user.");
+    logger.error(`Error updating user ${uidToDisable}:`, error);
+    throw new HttpsError("internal", "An error occurred while updating the user.");
   }
 })
 
@@ -371,12 +380,17 @@ export const onNewClaimV2 = onDocumentCreated("claims/{claimId}", async (event) 
   }
   const claim = snapshot.data();
 
-  try {
-    // 1. Get the item owner's UID from the claim
-    const ownerUid = claim.ownerUid;
+  // Validate the fields we rely on before using them (L23): a malformed claim
+  // doc shouldn't crash the trigger with undefined lookups.
+  const ownerUid = claim.ownerUid;
+  const claimerUid = claim.claimerUid;
+  if (typeof ownerUid !== "string" || typeof claimerUid !== "string") {
+    logger.warn("onNewClaimV2: claim missing ownerUid/claimerUid; skipping.");
+    return;
+  }
 
-    // 2. Get the claimer's name to put in the message
-    const claimerUid = claim.claimerUid;
+  try {
+    // Get the claimer's name to put in the message
     const claimerDoc = await db.collection("users").doc(claimerUid).get();
     const claimerName = claimerDoc.data()?.name || "Someone";
 
@@ -428,10 +442,15 @@ export const onNewMessageV2 = onDocumentCreated("messages/{messageId}", async (e
   }
   const message = snapshot.data();
 
-  try {
-    const senderUid = message.senderUid;
-    const claimId = message.claimId;
+  // Validate required fields before use (L23).
+  const senderUid = message.senderUid;
+  const claimId = message.claimId;
+  if (typeof senderUid !== "string" || typeof claimId !== "string") {
+    logger.warn("onNewMessageV2: message missing senderUid/claimId; skipping.");
+    return;
+  }
 
+  try {
     // 1. Get the claim to find out who the two parties are
     const claimDoc = await db.collection("claims").doc(claimId).get();
     const claim = claimDoc.data();
@@ -657,13 +676,15 @@ export const verifyMatricCard = onCall(
     // The user doc only carries the boolean flag and a verification date.
     // Strip any legacy matric fields so existing leaky docs migrate
     // themselves on next verification.
-    await db.collection("users").doc(callerUid).update({
+    // set(merge) rather than update() so a missing user doc doesn't throw
+    // after the verification doc was already written (L21).
+    await db.collection("users").doc(callerUid).set({
       isVerified: true,
       verificationDate: admin.firestore.FieldValue.serverTimestamp(),
       matricNumber: admin.firestore.FieldValue.delete(),
       matricName: admin.firestore.FieldValue.delete(),
       matricCardUrl: admin.firestore.FieldValue.delete(),
-    });
+    }, { merge: true });
 
     logger.log(`Matric card verified for ${callerUid}.`);
     return { success: true };

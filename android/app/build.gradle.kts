@@ -50,7 +50,7 @@ flutter {
 android {
     namespace = "com.example.foundme"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         // Java 17 is recommended with AGP 8.x / recent Flutter
@@ -65,7 +65,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.foundme"
-        minSdk = maxOf(21, flutter.minSdkVersion)  // flutter_local_notifications needs >= 21
+        minSdk = maxOf(23, flutter.minSdkVersion)  // cloud_firestore needs >= 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

@@ -172,10 +172,12 @@ class DashboardOverviewTab extends StatelessWidget {
             stream: LogService.instance.getRecentLogs(),
             //FirebaseFirestore.instance.collection('items').orderBy('postedAt', descending: true).limit(10).snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.hasError)
+              if (snapshot.hasError) {
                 return Text('Error loading logs: ${snapshot.error}');
-              if (!snapshot.hasData)
+              }
+              if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
 
               final logs = snapshot.data!.docs;
 
@@ -232,7 +234,7 @@ class DashboardOverviewTab extends StatelessWidget {
                     return ListTile(
                       dense: true,
                       leading: CircleAvatar(
-                        backgroundColor: statusColor.withOpacity(0.1),
+                        backgroundColor: statusColor.withValues(alpha: 0.1),
                         child: Icon(statusIcon, color: statusColor, size: 20),
                       ),
                       title: Text(
@@ -279,7 +281,7 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -295,7 +297,7 @@ class _StatCard extends StatelessWidget {
                 color: color,
               ),
             ),
-            Text(title, style: TextStyle(color: color.withOpacity(0.8))),
+            Text(title, style: TextStyle(color: color.withValues(alpha: 0.8))),
           ],
         ),
       ),

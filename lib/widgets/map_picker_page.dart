@@ -16,13 +16,27 @@ class _MapPickerPageState extends State<MapPickerPage> {
   LatLng? _picked;
   String _label = 'Tap map to pick location';
 
+  // Fallback camera (USIM) when we can't get the device location, so the
+  // picker still opens instead of spinning forever (L8).
+  static const _fallback = LatLng(2.8443, 101.7818);
+
   Future<LatLng> _currentLatLng() async {
-    LocationPermission perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied)
-      // ignore: curly_braces_in_flow_control_structures
-      perm = await Geolocator.requestPermission();
-    final pos = await Geolocator.getCurrentPosition();
-    return LatLng(pos.latitude, pos.longitude);
+    try {
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      // Denied / deniedForever / services off: just use the fallback camera;
+      // the user can still tap to pick a point.
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        return _fallback;
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      return LatLng(pos.latitude, pos.longitude);
+    } catch (_) {
+      return _fallback;
+    }
   }
 
   Future<void> _onTap(LatLng p) async {
@@ -52,12 +66,14 @@ class _MapPickerPageState extends State<MapPickerPage> {
     return FutureBuilder(
       future: _currentLatLng(),
       builder: (context, snap) {
-        if (!snap.hasData) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final start = snap.data as LatLng;
+        // _currentLatLng never throws now, but guard anyway so a future change
+        // can't reintroduce the infinite spinner.
+        final start = snap.data ?? _fallback;
         return Scaffold(
           appBar: AppBar(title: const Text('Pick location')),
           body: GoogleMap(

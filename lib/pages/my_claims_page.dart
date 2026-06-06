@@ -36,8 +36,8 @@ class MyClaimsPage extends StatelessWidget {
 
     return Chip(
       label: Text(label, style: TextStyle(color: chipColor)),
-      backgroundColor: chipColor.withOpacity(0.15),
-      side: BorderSide(color: chipColor.withOpacity(0.3)),
+      backgroundColor: chipColor.withValues(alpha: 0.15),
+      side: BorderSide(color: chipColor.withValues(alpha: 0.3)),
       padding: EdgeInsets.zero,
     );
   }

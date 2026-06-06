@@ -22,8 +22,9 @@ class ApprovalsTab extends StatelessWidget {
             ),
           );
         }
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final items = snapshot.data!;
 
         if (items.isEmpty) {

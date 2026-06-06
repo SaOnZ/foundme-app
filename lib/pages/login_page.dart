@@ -275,10 +275,16 @@ class _LoginPageState extends State<LoginPage> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      icon: Image.network(
-                        'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
-                        height: 24,
-                        errorBuilder: (ctx, _, __) => const Icon(Icons.public),
+                      // Locally-rendered "G" mark instead of a per-render
+                      // Wikimedia fetch (which logged NetworkImageLoadException
+                      // and showed a globe fallback offline) — L4.
+                      icon: const Text(
+                        'G',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4285F4),
+                        ),
                       ),
                       label: const Text('Sign in with Google'),
                       onPressed: _loading ? null : _signInWithGoogle,

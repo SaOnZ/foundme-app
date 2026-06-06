@@ -1,7 +1,7 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -237,7 +237,7 @@ class ItemService {
         return ItemModel.fromDoc(doc);
       }).toList();
     } catch (e) {
-      print('Error fetching matches: $e');
+      debugPrint('Error fetching matches: $e');
       return [];
     }
   }
@@ -261,19 +261,19 @@ class ItemService {
       batch.update(doc.reference, {'status': ItemStatus.expired});
       count++;
 
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data();
       final title = data['title'] ?? 'Unknown Item';
 
       LogService.instance.logActivity(
         "Item Expired",
-        "Item '${doc['title']}' auto-expired (90+ days)",
+        "Item '$title' auto-expired (90+ days)",
         "expired",
       );
     }
 
     if (count > 0) {
       await batch.commit();
-      print("🧹 Auto-expired $count old items.");
+      debugPrint("🧹 Auto-expired $count old items.");
     }
 
     return count;
@@ -312,7 +312,7 @@ class ItemService {
         await _sendAdminNotification(ownerUid, titleMsg, bodyMsg);
       }
     } catch (e) {
-      print("Error sending admin notification: $e");
+      debugPrint("Error sending admin notification: $e");
     }
   }
 
@@ -326,7 +326,7 @@ class ItemService {
           .httpsCallable('sendAdminNotification')
           .call({'targetUid': targetUid, 'title': title, 'body': body});
     } catch (e) {
-      print("Failed to send admin notification: $e");
+      debugPrint("Failed to send admin notification: $e");
     }
   }
 }

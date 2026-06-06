@@ -136,7 +136,7 @@ class _ChatPageState extends State<ChatPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -161,7 +161,16 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final me = AuthService.instance.currentUser!.uid;
+    // Guard against a signed-out / expired session instead of dereferencing
+    // currentUser! (L13).
+    final currentUser = AuthService.instance.currentUser;
+    if (currentUser == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Chat')),
+        body: const Center(child: Text('Please sign in to view this chat.')),
+      );
+    }
+    final me = currentUser.uid;
 
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
@@ -291,7 +300,7 @@ class _ChatPageState extends State<ChatPage> {
               // Claim header (status)
               Container(
                 width: double.infinity,
-                color: Theme.of(context).colorScheme.surfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 8,
@@ -344,7 +353,7 @@ class _ChatPageState extends State<ChatPage> {
                                     ).colorScheme.primaryContainer
                                   : Theme.of(
                                       context,
-                                    ).colorScheme.surfaceVariant,
+                                    ).colorScheme.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(m.text),

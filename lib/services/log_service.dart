@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class LogService {
   // Singleton pattern (same as your other services)
@@ -20,14 +21,18 @@ class LogService {
         'timestamp': FieldValue.serverTimestamp(), // Critical for sorting!
       });
     } catch (e) {
-      print("Failed to write log: $e");
+      debugPrint("Failed to write log: $e");
     }
   }
 
   /// 2. READ LOGS
   /// This Stream is used by your Admin Dashboard to show the list.
-  /// It sorts by newest first and limits to the last 20 events.
-  Stream<QuerySnapshot> getRecentLogs() {
-    return _logs.orderBy('timestamp', descending: true).limit(20).snapshots();
+  /// Sorts by newest first; [limit] caps how many events are returned.
+  /// (Consumers handle errors via StreamBuilder.hasError.)
+  Stream<QuerySnapshot> getRecentLogs({int limit = 20}) {
+    return _logs
+        .orderBy('timestamp', descending: true)
+        .limit(limit)
+        .snapshots();
   }
 }

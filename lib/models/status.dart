@@ -1,9 +1,9 @@
-/// Canonical status vocabularies shared across models, services, and UI.
-///
-/// Before this existed, claim/item statuses were spelled inconsistently
-/// (e.g. `declined` vs `rejected`, `approved` vs `active`) which left dead
-/// UI branches and mismatched chips. Use these constants everywhere instead
-/// of bare string literals so the vocabulary stays in one place.
+// Canonical status vocabularies shared across models, services, and UI.
+//
+// Before this existed, claim/item statuses were spelled inconsistently
+// (e.g. `declined` vs `rejected`, `approved` vs `active`) which left dead
+// UI branches and mismatched chips. Use these constants everywhere instead
+// of bare string literals so the vocabulary stays in one place.
 
 /// Lifecycle of a claim (a claimer's request against an item).
 class ClaimStatus {

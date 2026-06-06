@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/item_service.dart';
 import '../models/item.dart';
 import 'item_detail_page.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/feed_item_card.dart';
 
 class FeedPage extends StatefulWidget {
@@ -202,23 +201,4 @@ class _FeedPageState extends State<FeedPage>
     );
   }
 
-  // Helper: Convert Timestamp to "time Ago" string
-  String _timeAgo(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 365) {
-      return '${(difference.inDays / 365).floor()}y ago';
-    } else if (difference.inDays > 30) {
-      return '${(difference.inDays / 30).floor()}mo ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
 }

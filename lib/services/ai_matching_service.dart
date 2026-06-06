@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 class AiMatchingService {
@@ -27,7 +27,7 @@ class AiMatchingService {
           .map((m) => Map<String, dynamic>.from(m))
           .toList();
     } catch (e) {
-      print('AI match lookup failed: $e');
+      debugPrint('AI match lookup failed: $e');
       return [];
     }
   }

@@ -215,9 +215,7 @@ class ItemDetailPage extends StatelessWidget {
               Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
               const SizedBox(width: 4),
               Text(
-                item.postedAt != null
-                    ? _timeAgo(item.postedAt!.toDate())
-                    : 'Unknown date',
+                _timeAgo(item.postedAt.toDate()),
                 style: TextStyle(color: Colors.grey[600]),
               ),
             ],

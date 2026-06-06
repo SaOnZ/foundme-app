@@ -1,4 +1,5 @@
 // auth_service.dart
+import 'package:flutter/foundation.dart';
 import 'dart:io'; // For File
 import 'package:firebase_storage/firebase_storage.dart'; //For Storage
 import 'package:image_picker/image_picker.dart'; // For Image Picker
@@ -317,7 +318,7 @@ class AuthService {
         }, SetOptions(merge: true));
       }
     } catch (e) {
-      print('Failed to save FCM token: $e');
+      debugPrint('Failed to save FCM token: $e');
     }
   }
 }

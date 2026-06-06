@@ -30,11 +30,13 @@ class UserModel {
   });
 
   factory UserModel.fromDoc(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    // A deleted/non-existent doc yields null data; degrade to defaults instead
+    // of throwing on the cast (L5).
+    final data = (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
 
     // Helper to safely parse numbers
-    double _asDouble(dynamic v) => (v is num) ? v.toDouble() : 0.0;
-    int _asInt(dynamic v) => (v is num) ? v.toInt() : 0;
+    double asDouble(dynamic v) => (v is num) ? v.toDouble() : 0.0;
+    int asInt(dynamic v) => (v is num) ? v.toInt() : 0;
 
     return UserModel(
       uid: doc.id,
@@ -45,8 +47,8 @@ class UserModel {
       photoURL: data['photoURL'],
       isDisabled: data['disabled'] ?? false,
 
-      averageRating: _asDouble(data['averageRating']),
-      ratingCount: _asInt(data['ratingCount']),
+      averageRating: asDouble(data['averageRating']),
+      ratingCount: asInt(data['ratingCount']),
 
       isVerified: data['isVerified'] ?? false,
     );

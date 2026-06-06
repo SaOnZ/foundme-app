@@ -31,7 +31,7 @@ class _AddItemPageState extends State<AddItemPage> {
 
   String _type = 'lost';
   String _category = 'Others';
-  List<XFile> _photos = [];
+  final List<XFile> _photos = [];
   double? _lat, _lng;
   String _locationText = '';
 

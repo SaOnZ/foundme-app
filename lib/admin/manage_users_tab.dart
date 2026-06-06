@@ -144,36 +144,52 @@ class ManageUsersTab extends StatelessWidget {
                   : PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert),
                       onSelected: (value) {
-                        if (value == 'disable')
+                        if (value == 'disable') {
                           _showDisableDialog(context, user);
+                        } else if (value == 'enable') {
+                          _showEnableDialog(context, user);
+                        }
                       },
                       itemBuilder: (ctx) => [
-                        PopupMenuItem(
-                          enabled: !isAdmin, // Cannot disable other admins
-                          value: 'disable',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.block,
-                                color: (isAdmin || isDisabled)
-                                    ? Colors.grey
-                                    : Colors.red,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                isDisabled
-                                    ? 'Already Disabled'
-                                    : 'Disable Account',
-                                style: TextStyle(
-                                  color: (isAdmin || isDisabled)
-                                      ? Colors.grey
-                                      : Colors.red,
+                        if (!isDisabled)
+                          PopupMenuItem(
+                            enabled: !isAdmin, // Cannot disable other admins
+                            value: 'disable',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.block,
+                                  color: isAdmin ? Colors.grey : Colors.red,
+                                  size: 18,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Disable Account',
+                                  style: TextStyle(
+                                    color: isAdmin ? Colors.grey : Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                        if (isDisabled)
+                          const PopupMenuItem(
+                            value: 'enable',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Re-enable Account',
+                                  style: TextStyle(color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
             );
@@ -184,46 +200,102 @@ class ManageUsersTab extends StatelessWidget {
   }
 
   void _showDisableDialog(BuildContext context, UserModel user) {
+    _showToggleDialog(
+      context,
+      user: user,
+      disable: true,
+      title: 'Disable User?',
+      body:
+          'Are you sure you want to disable ${user.name}? They will no longer '
+          'be able to log in to the app.',
+      confirmLabel: 'Disable User',
+      confirmColor: Colors.red,
+    );
+  }
+
+  void _showEnableDialog(BuildContext context, UserModel user) {
+    _showToggleDialog(
+      context,
+      user: user,
+      disable: false,
+      title: 'Re-enable User?',
+      body: 'Re-enable ${user.name}? They will be able to log in again.',
+      confirmLabel: 'Re-enable User',
+      confirmColor: Colors.green,
+    );
+  }
+
+  void _showToggleDialog(
+    BuildContext context, {
+    required UserModel user,
+    required bool disable,
+    required String title,
+    required String body,
+    required String confirmLabel,
+    required Color confirmColor,
+  }) {
+    // StatefulBuilder gives the dialog a local busy flag so the confirm button
+    // can be disabled in-flight against double-taps (L14).
+    bool busy = false;
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Disable User?'),
-          content: Text(
-            'Are you sure you want to disable ${user.name}? They will no longer be able to log in to the app.',
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Disable User'),
-              onPressed: () async {
-                await _disableUser(context, user.uid);
-                if (context.mounted) Navigator.of(context).pop();
-              },
-            ),
-          ],
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setLocal) {
+            return AlertDialog(
+              title: Text(title),
+              content: Text(body),
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: confirmColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          setLocal(() => busy = true);
+                          await _setUserDisabled(context, user.uid, disable);
+                          if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                        },
+                  child: busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(confirmLabel),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _disableUser(BuildContext context, String uid) async {
+  Future<void> _setUserDisabled(
+    BuildContext context,
+    String uid,
+    bool disable,
+  ) async {
     try {
       final callable = FirebaseFunctions.instance.httpsCallable('disableUser');
-      await callable.call({'uid': uid});
-      // The Cloud Function writes `disabled: true` on the user doc itself,
-      // so no client-side mirror write is needed.
-
+      await callable.call({'uid': uid, 'disabled': disable});
+      // The Cloud Function mirrors the flag onto the user doc.
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User disabled successfully.')),
+          SnackBar(
+            content: Text(
+              disable
+                  ? 'User disabled successfully.'
+                  : 'User re-enabled successfully.',
+            ),
+          ),
         );
       }
     } on FirebaseFunctionsException catch (e) {
@@ -239,7 +311,7 @@ class ManageUsersTab extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('An unknown error occured: $e'),
+            content: Text('An unknown error occurred: $e'),
             backgroundColor: Colors.red,
           ),
         );

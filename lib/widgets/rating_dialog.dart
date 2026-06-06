@@ -44,9 +44,9 @@ class _RatingDialogState extends State<RatingDialog> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('review submitted successfully!')),
+        const SnackBar(content: Text('Review submitted successfully!')),
       );
-      Navigator.of(context).pop(); // pop with 'true' to indicate success
+      Navigator.of(context).pop(true); // signal success to the caller (L11)
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -58,6 +58,14 @@ class _RatingDialogState extends State<RatingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Block back-button dismissal while a submit is in flight (L11).
+    return PopScope(
+      canPop: !_isLoading,
+      child: _buildDialog(context),
+    );
+  }
+
+  Widget _buildDialog(BuildContext context) {
     return AlertDialog(
       title: Text('Rate ${widget.personToReviewName}'),
       content: SingleChildScrollView(
@@ -86,9 +94,11 @@ class _RatingDialogState extends State<RatingDialog> {
             // Optional comment text field
             TextField(
               controller: _commentController,
+              maxLength: 500,
               decoration: const InputDecoration(
                 hintText: 'Leave an optional comment (optional)',
                 border: OutlineInputBorder(),
+                counterText: '',
               ),
               maxLines: 3,
             ),

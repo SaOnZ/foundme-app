@@ -35,12 +35,16 @@ class _MatricVerificationPageState extends State<MatricVerificationPage> {
 
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final file = await picker.pickImage(source: source, imageQuality: 85);
-    if (file != null) {
+    try {
+      final file = await picker.pickImage(source: source, imageQuality: 85);
+      if (file == null || !mounted) return;
       setState(() {
         _image = File(file.path);
         _errorMsg = null;
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _errorMsg = 'Could not access the image picker.');
     }
   }
 

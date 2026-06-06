@@ -43,13 +43,15 @@ class ManageItemsTab extends StatelessWidget {
             // Determine status color
             final status = ItemStatus.normalize(item.status);
             Color statusColor = Colors.grey;
-            if (status == ItemStatus.active) statusColor = Colors.green;
-            if (status == ItemStatus.pendingApproval)
+            if (status == ItemStatus.active) {
+              statusColor = Colors.green;
+            } else if (status == ItemStatus.pendingApproval) {
               statusColor = Colors.orange;
-            if (status == ItemStatus.closed ||
+            } else if (status == ItemStatus.closed ||
                 status == ItemStatus.expired ||
-                status == ItemStatus.rejected)
+                status == ItemStatus.rejected) {
               statusColor = Colors.red;
+            }
 
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(
