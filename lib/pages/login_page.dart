@@ -156,7 +156,9 @@ class _LoginPageState extends State<LoginPage> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
+          // Scroll when the keyboard shrinks the viewport so the centered
+          // column doesn't overflow (N1).
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Form(
               key: _form,
