@@ -115,11 +115,13 @@ service cloud.firestore {
         && request.resource.data.ownerUid != request.auth.uid
         && request.resource.data.status == 'pending';
 
-      // Update: parties can change status. Owner can accept/decline/close;
-      // claimer can set 'closed', or re-open their own *declined* claim back to
-      // 'pending' (re-claim). Status is whitelisted so an owner can't pin
-      // arbitrary strings into the field. Review flags (which the submitReview
-      // Cloud Function controls) and identity fields are immutable from client.
+      // Update: status changes follow a state machine rather than a free
+      // whitelist (M34). Identity fields are immutable; review flags are owned
+      // by the submitReview Cloud Function. 'closed' is terminal for everyone.
+      // Owner:   pending -> accepted|declined|closed
+      //          accepted -> declined|closed
+      //          declined -> closed
+      // Claimer: any non-closed -> closed, or re-open own declined -> pending.
       allow update: if isSignedIn()
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.claimerUid == resource.data.claimerUid
@@ -127,11 +129,22 @@ service cloud.firestore {
         && request.resource.data.status in ['pending', 'accepted', 'declined', 'closed']
         && request.resource.data.get('ownerHasReviewed', false) == resource.data.get('ownerHasReviewed', false)
         && request.resource.data.get('claimerHasReviewed', false) == resource.data.get('claimerHasReviewed', false)
-        && (uidIs(resource.data.ownerUid)
+        && resource.data.status != 'closed'
+        && (
+            (uidIs(resource.data.ownerUid)
+              && (
+                  (resource.data.status == 'pending'
+                    && request.resource.data.status in ['accepted', 'declined', 'closed'])
+                  || (resource.data.status == 'accepted'
+                    && request.resource.data.status in ['declined', 'closed'])
+                  || (resource.data.status == 'declined'
+                    && request.resource.data.status == 'closed')
+                 ))
             || (uidIs(resource.data.claimerUid)
                 && (request.resource.data.status == 'closed'
                     || (request.resource.data.status == 'pending'
-                        && resource.data.status == 'declined'))));
+                        && resource.data.status == 'declined')))
+           );
 
       allow delete: if isAdmin();
     }

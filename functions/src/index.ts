@@ -25,6 +25,40 @@ function extractJson(raw: string, openChar: "{" | "["): string | null {
   return raw.substring(start, end + 1);
 }
 
+// Max length of a base64 image string accepted by the Gemini callables.
+// ~8M chars of base64 ≈ 6 MB binary; the client uploads compressed images well
+// under this. Anything larger is rejected before we pay for an LLM call (M33).
+const MAX_IMAGE_B64 = 8_000_000;
+
+// Reject unauthenticated AND anonymous (guest) callers. The Gemini callables
+// cost money per invocation, so guests must not be able to run them (M33).
+function assertRealUser(request: { auth?: { uid?: string; token?: unknown } }): string {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be logged in.");
+  }
+  const token = request.auth?.token as { firebase?: { sign_in_provider?: string } } | undefined;
+  if (token?.firebase?.sign_in_provider === "anonymous") {
+    throw new HttpsError("permission-denied", "Guests cannot use this feature.");
+  }
+  return uid;
+}
+
+// Validate an optional/required base64 image argument and enforce the size cap.
+function assertImageB64(value: unknown, { required }: { required: boolean }): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    if (required) throw new HttpsError("invalid-argument", "Missing imageBase64.");
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", "imageBase64 must be a string.");
+  }
+  if (value.length > MAX_IMAGE_B64) {
+    throw new HttpsError("invalid-argument", "Image is too large.");
+  }
+  return value;
+}
+
 // FCM rejects requests with these error codes when the token is dead.
 // Strip them out of the user's fcmTokens array so we stop trying.
 const DEAD_FCM_ERRORS = new Set([
@@ -464,18 +498,13 @@ export const onNewMessageV2 = onDocumentCreated("messages/{messageId}", async (e
 export const analyzeItemImage = onCall(
   { secrets: [geminiKey] },
   async (request) => {
-    const callerUid = request.auth?.uid;
-    if (!callerUid) {
-      throw new HttpsError("unauthenticated", "You must be logged in.");
-    }
+    assertRealUser(request);
 
     const { imageBase64, validCategories } = request.data as {
       imageBase64?: string;
       validCategories?: string[];
     };
-    if (!imageBase64 || typeof imageBase64 !== "string") {
-      throw new HttpsError("invalid-argument", "Missing imageBase64.");
-    }
+    const image = assertImageB64(imageBase64, { required: true })!;
     const cats = Array.isArray(validCategories) ? validCategories : [];
 
     try {
@@ -495,14 +524,25 @@ export const analyzeItemImage = onCall(
 
       const result = await model.generateContent([
         prompt,
-        { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+        { inlineData: { mimeType: "image/jpeg", data: image } },
       ]);
       const text = result.response.text();
       const json = extractJson(text, "{");
       if (!json) {
         throw new HttpsError("internal", "Model returned no usable JSON.");
       }
-      return JSON.parse(json);
+      // Validate the shape rather than returning raw model output (M33).
+      const parsed = JSON.parse(json);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new HttpsError("internal", "Model returned an unexpected shape.");
+      }
+      return {
+        title: typeof parsed.title === "string" ? parsed.title : "",
+        description:
+          typeof parsed.description === "string" ? parsed.description : "",
+        category: typeof parsed.category === "string" ? parsed.category : "Others",
+        tags: typeof parsed.tags === "string" ? parsed.tags : "",
+      };
     } catch (e) {
       logger.error("analyzeItemImage failed:", e);
       throw new HttpsError("internal", "Image analysis failed.");
@@ -673,10 +713,7 @@ export const getMatricCardUrl = onCall(async (request) => {
 export const findMatchingItems = onCall(
   { secrets: [geminiKey] },
   async (request) => {
-    const callerUid = request.auth?.uid;
-    if (!callerUid) {
-      throw new HttpsError("unauthenticated", "You must be logged in.");
-    }
+    const callerUid = assertRealUser(request);
 
     const { itemId, imageBase64 } = request.data as {
       itemId?: string;
@@ -685,6 +722,7 @@ export const findMatchingItems = onCall(
     if (!itemId) {
       throw new HttpsError("invalid-argument", "Missing itemId.");
     }
+    const image = assertImageB64(imageBase64, { required: false });
 
     const itemDoc = await db.collection("items").doc(itemId).get();
     if (!itemDoc.exists) {
@@ -746,9 +784,9 @@ export const findMatchingItems = onCall(
         | string
         | { inlineData: { mimeType: string; data: string } }
       > = [prompt];
-      if (imageBase64) {
+      if (image) {
         parts.push({
-          inlineData: { mimeType: "image/jpeg", data: imageBase64 },
+          inlineData: { mimeType: "image/jpeg", data: image },
         });
       }
 
@@ -756,7 +794,19 @@ export const findMatchingItems = onCall(
       const text = result.response.text();
       const json = extractJson(text, "[");
       if (!json) return [];
-      return JSON.parse(json);
+      // Only return well-formed {id, score} entries (M33).
+      const parsed = JSON.parse(json);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(
+          (m) =>
+            m && typeof m === "object" && typeof m.id === "string",
+        )
+        .map((m) => ({
+          id: m.id as string,
+          score: typeof m.score === "number" ? m.score : 0,
+          reason: typeof m.reason === "string" ? m.reason : "",
+        }));
     } catch (e) {
       logger.error("findMatchingItems failed:", e);
       throw new HttpsError("internal", "Match lookup failed.");
@@ -778,31 +828,50 @@ export const migrateLegacyMatricFields = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Admin only.");
   }
 
-  const snap = await db.collection("users").get();
+  // Walk the users collection in pages with a document-id cursor instead of
+  // pulling the whole collection into memory, and commit each page as a single
+  // batched write instead of two sequential awaits per user (M31).
+  const PAGE = 200; // 200 users => <=400 batched writes (<500 limit)
+  const usersRef = db.collection("users").orderBy(admin.firestore.FieldPath.documentId());
   let migrated = 0;
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const hasLegacy =
-      data.matricNumber || data.matricName || data.matricCardUrl;
-    if (!hasLegacy) continue;
+  let cursor: admin.firestore.QueryDocumentSnapshot | null = null;
 
-    await db.collection("verifications").doc(doc.id).set(
-      {
-        matricNumber: data.matricNumber ?? null,
-        matricName: data.matricName ?? null,
-        matricCardUrl: data.matricCardUrl ?? null,
-        verifiedAt:
-          data.verificationDate ?? admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+  for (;;) {
+    let q = usersRef.limit(PAGE);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
 
-    await doc.ref.update({
-      matricNumber: admin.firestore.FieldValue.delete(),
-      matricName: admin.firestore.FieldValue.delete(),
-      matricCardUrl: admin.firestore.FieldValue.delete(),
-    });
-    migrated++;
+    const batch = db.batch();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      const hasLegacy =
+        data.matricNumber || data.matricName || data.matricCardUrl;
+      if (!hasLegacy) continue;
+
+      batch.set(
+        db.collection("verifications").doc(doc.id),
+        {
+          matricNumber: data.matricNumber ?? null,
+          matricName: data.matricName ?? null,
+          matricCardUrl: data.matricCardUrl ?? null,
+          verifiedAt:
+            data.verificationDate ??
+            admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      batch.update(doc.ref, {
+        matricNumber: admin.firestore.FieldValue.delete(),
+        matricName: admin.firestore.FieldValue.delete(),
+        matricCardUrl: admin.firestore.FieldValue.delete(),
+      });
+      migrated++;
+    }
+    await batch.commit();
+
+    cursor = snap.docs[snap.docs.length - 1];
+    if (snap.size < PAGE) break;
   }
 
   logger.log(`migrateLegacyMatricFields: moved ${migrated} user(s).`);
