@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/claim_service.dart';
 import '../services/auth_service.dart';
 import '../models/chat_message.dart';
-import '../models/claim.dart';
 import '../widgets/rating_dialog.dart';
 import '../models/user_model.dart';
 
@@ -17,11 +16,40 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final _c = TextEditingController();
+  final _scroll = ScrollController();
   bool _actionBusy = false;
+  bool _sending = false;
+
+  void _scrollToBottom() {
+    if (!_scroll.hasClients) return;
+    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+  }
+
+  Future<void> _sendMessage() async {
+    final t = _c.text.trim();
+    if (t.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await ClaimService.instance.sendMessage(widget.claimId, t);
+      if (!mounted) return;
+      _c.clear(); // only clear once the send actually succeeded
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message failed to send. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
 
   @override
   void dispose() {
     _c.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -257,7 +285,12 @@ class _ChatPageState extends State<ChatPage> {
                     if (msgs.isEmpty) {
                       return const Center(child: Text('No messages yet.'));
                     }
+                    // Jump to the newest message after this frame renders.
+                    WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => _scrollToBottom(),
+                    );
                     return ListView.builder(
+                      controller: _scroll,
                       padding: const EdgeInsets.all(12),
                       itemCount: msgs.length,
                       itemBuilder: (_, i) {
@@ -332,15 +365,7 @@ class _ChatPageState extends State<ChatPage> {
                         const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.send),
-                          onPressed: () async {
-                            final t = _c.text.trim();
-                            if (t.isEmpty) return;
-                            await ClaimService.instance.sendMessage(
-                              widget.claimId,
-                              t,
-                            );
-                            _c.clear();
-                          },
+                          onPressed: _sending ? null : _sendMessage,
                         ),
                       ],
                     ),

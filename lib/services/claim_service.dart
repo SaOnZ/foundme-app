@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'auth_service.dart';
 import '../models/claim.dart';
 import '../models/chat_message.dart';
@@ -80,7 +79,7 @@ class ClaimService {
 
       final itemSnap = await txn.get(itemRef);
       final existingAccepted =
-          (itemSnap.data() as Map<String, dynamic>?)?['acceptedClaimId'];
+          itemSnap.data()?['acceptedClaimId'];
       if (existingAccepted != null && existingAccepted != claimId) {
         throw ClaimActionException(
           'Another claim has already been accepted for this item.',
@@ -137,7 +136,7 @@ class ClaimService {
         final itemRef = _db.collection('items').doc(itemId);
         final itemSnap = await txn.get(itemRef);
         final accepted =
-            (itemSnap.data() as Map<String, dynamic>?)?['acceptedClaimId'];
+            itemSnap.data()?['acceptedClaimId'];
         if (accepted == claimId) {
           txn.update(itemRef, {'acceptedClaimId': FieldValue.delete()});
         }
@@ -173,10 +172,14 @@ class ClaimService {
     });
   }
 
-  Stream<List<ChatMessage>> messages(String claimId) {
+  /// Streams the most recent [limit] messages for a claim. Fetches newest-first
+  /// (so the limit keeps the latest messages) then returns them oldest-first
+  /// for display. Bounding the query avoids loading an unbounded conversation.
+  Stream<List<ChatMessage>> messages(String claimId, {int limit = 50}) {
     return _messages
         .where('claimId', isEqualTo: claimId)
-        .orderBy('createdAt', descending: false)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((s) {
           final list = s.docs.map(ChatMessage.fromDoc).toList();

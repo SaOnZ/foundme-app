@@ -24,7 +24,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    NotificationService.instance.init();
+    // NotificationService.init() is called once in main(); don't re-init here
+    // (that double-registered every FCM listener). Just save this signed-in
+    // user's token.
     AuthService.instance.saveUserToken();
 
     _messageSubscription = NotificationService.instance.foregroundMessages
@@ -38,10 +40,6 @@ class _HomePageState extends State<HomePage> {
             );
           }
         });
-
-    FirebaseMessaging.instance.getToken().then((token) {
-      print("MY_TEXT_TOKEN: $token");
-    });
   }
 
   @override

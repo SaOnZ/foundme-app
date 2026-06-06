@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
@@ -80,21 +81,35 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
       }
-    } catch (e) {
-      // 3. Handle Firebase errors nicely
-      String errorMessage = "An unexpected error occurred.";
-      if (e.toString().contains('user-not-found')) {
-        errorMessage = "We couldn't find an account with that email.";
-      } else if (e.toString().contains('wrong-password')) {
-        errorMessage = "The password you entered is incorrect.";
-      } else if (e.toString().contains('invalid-email')) {
-        errorMessage = "That email address doesn't look right.";
-      } else {
-        errorMessage = "Invalid credentials. Please check your details.";
+    } on FirebaseAuthException catch (e) {
+      // Switch on the typed error code. Modern Firebase Auth (with email
+      // enumeration protection) returns 'invalid-credential' for both a wrong
+      // password and an unknown email, so the old wrong-password/user-not-found
+      // string matching was effectively dead.
+      String errorMessage;
+      switch (e.code) {
+        case 'invalid-email':
+          errorMessage = "That email address doesn't look right.";
+          break;
+        case 'user-disabled':
+          errorMessage = "This account has been disabled.";
+          break;
+        case 'too-many-requests':
+          errorMessage = "Too many attempts. Please try again later.";
+          break;
+        case 'network-request-failed':
+          errorMessage = "Network error. Check your connection and try again.";
+          break;
+        default:
+          errorMessage = "Invalid credentials. Please check your details.";
       }
 
       if (mounted) {
         _showErrorDialog(errorMessage);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorDialog("An unexpected error occurred. Please try again.");
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -106,9 +121,32 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await AuthService.instance.continueAsGuest();
       if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        _showErrorDialog("Guest sign-infailed: $e");
+        _showErrorDialog("Guest sign-in failed. Please try again.");
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _loading = true);
+    try {
+      final user = await AuthService.instance.signInWithGoogle();
+      if (!mounted) return;
+      if (user == null) {
+        // Null means the user dismissed the Google account picker — not an
+        // error, so stay quiet.
+        return;
+      }
+      // Signed in: AuthGate reacts to the auth stream and routes us onward.
+      Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
+    } catch (_) {
+      if (mounted) {
+        _showErrorDialog(
+          "Google sign-in failed. Please check your connection and try again.",
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -244,34 +282,7 @@ class _LoginPageState extends State<LoginPage> {
                         errorBuilder: (ctx, _, __) => const Icon(Icons.public),
                       ),
                       label: const Text('Sign in with Google'),
-                      onPressed: _loading
-                          ? null
-                          : () async {
-                              setState(() => _loading = true);
-
-                              final user = await AuthService.instance
-                                  .signInWithGoogle();
-
-                              setState(() => _loading = false);
-
-                              if (user != null) {
-                                // AuthGate handles navigation automatically,
-                                // but we can pop here just in case or show success
-                                if (mounted) {
-                                  // No explicit navigation needed if using AuthGate stream
-                                }
-                              } else {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Google Sign-In canceled or failed',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
+                      onPressed: _loading ? null : _signInWithGoogle,
                     ),
                   ),
                   const SizedBox(height: 12),

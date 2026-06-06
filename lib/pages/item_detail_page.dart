@@ -72,48 +72,59 @@ class ItemDetailPage extends StatelessWidget {
 
     if (confirm != true) return;
 
-    // Look up the accepted claim so we can close the claim alongside the
-    // item and pass the real claim id (not the item id) to the rating
-    // sheet — submitReview reads claims/{claimId}, so the previous
-    // implementation always failed with not-found.
-    final acceptedClaim = await FirebaseFirestore.instance
-        .collection('claims')
-        .where('itemId', isEqualTo: item.id)
-        .where('status', isEqualTo: 'accepted')
-        .limit(1)
-        .get();
+    try {
+      // Look up the accepted claim so we can close the claim alongside the
+      // item and pass the real claim id (not the item id) to the rating
+      // sheet — submitReview reads claims/{claimId}, so the previous
+      // implementation always failed with not-found.
+      // NOTE: this query needs a composite index on (itemId, status); the
+      // try/catch below makes a missing index surface as a message instead of
+      // an uncaught error that left the item un-resolvable.
+      final acceptedClaim = await FirebaseFirestore.instance
+          .collection('claims')
+          .where('itemId', isEqualTo: item.id)
+          .where('status', isEqualTo: 'accepted')
+          .limit(1)
+          .get();
 
-    if (acceptedClaim.docs.isEmpty) {
-      // No accepted claim (owner found the item without anyone claiming it).
-      // Close the item; nobody to rate.
-      await FirebaseFirestore.instance
-          .collection('items')
-          .doc(item.id)
-          .update({'status': 'closed'});
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Item closed.')));
+      if (acceptedClaim.docs.isEmpty) {
+        // No accepted claim (owner found the item without anyone claiming it).
+        // Close the item; nobody to rate.
+        await FirebaseFirestore.instance
+            .collection('items')
+            .doc(item.id)
+            .update({'status': 'closed'});
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Item closed.')));
+        }
+        return;
       }
-      return;
+
+      final claimDoc = acceptedClaim.docs.first;
+      final claimerUid = (claimDoc.data())['claimerUid'] as String?;
+      await ClaimService.instance.closeClaimAndItem(claimDoc.id, item.id);
+
+      final claimerName = claimerUid == null
+          ? 'the Claimer'
+          : (await AuthService.instance.getUserProfile(claimerUid))?.name ??
+                'the Claimer';
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Item resolved. Please rate the claimer.')),
+      );
+      _showRatingSheet(context, claimDoc.id, claimerName);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not resolve the item. Please try again.'),
+          ),
+        );
+      }
     }
-
-    final claimDoc = acceptedClaim.docs.first;
-    final claimerUid = (claimDoc.data())['claimerUid'] as String?;
-    await ClaimService.instance.closeClaimAndItem(claimDoc.id, item.id);
-
-    final claimerName = claimerUid == null
-        ? 'the Claimer'
-        : (await AuthService.instance.getUserProfile(claimerUid))?.name ??
-            'the Claimer';
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Item resolved. Please rate the claimer.'),
-      ),
-    );
-    _showRatingSheet(context, claimDoc.id, claimerName);
   }
 
   void _showRatingSheet(

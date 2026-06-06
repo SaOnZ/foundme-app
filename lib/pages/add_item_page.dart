@@ -110,6 +110,9 @@ class _AddItemPageState extends State<AddItemPage> {
   }
 
   Future<void> _generateTagsFromImage(XFile file) async {
+    // Guard against a second scan starting while one is in flight: concurrent
+    // scans would both write the form fields and race on _isAiScanning.
+    if (_isAiScanning) return;
     setState(() => _isAiScanning = true);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -136,35 +139,56 @@ class _AddItemPageState extends State<AddItemPage> {
             'validCategories': _cats,
           });
 
+      if (!mounted) return;
+
       final data = result.data;
       if (data is Map) {
         final parsed = Map<String, dynamic>.from(data);
 
         setState(() {
           if (_title.text.isEmpty) {
-            _title.text = parsed['title'] ?? '';
+            _title.text = (parsed['title'] ?? '').toString();
           }
           if (_desc.text.length < 5) {
-            _desc.text = parsed['description'] ?? '';
+            _desc.text = (parsed['description'] ?? '').toString();
           }
 
-          final String aiCategory = parsed['category'] ?? 'Others';
+          final String aiCategory = (parsed['category'] ?? 'Others').toString();
           _category = _cats.contains(aiCategory) ? aiCategory : 'Others';
 
-          final String newTags = parsed['tags'] ?? '';
-          final currentTags = _tags.text;
+          // The cloud function may return tags as a List (["a","b"]) or a
+          // comma-separated String ("a, b"); handle both.
+          final rawTags = parsed['tags'];
+          final List<String> aiTags = rawTags is List
+              ? rawTags.map((e) => e.toString().trim()).toList()
+              : (rawTags ?? '')
+                    .toString()
+                    .split(',')
+                    .map((e) => e.trim())
+                    .toList();
+
           final Set<String> uniqueTags = {};
-          if (currentTags.isNotEmpty) {
-            uniqueTags.addAll(currentTags.split(', '));
+          if (_tags.text.isNotEmpty) {
+            uniqueTags.addAll(_tags.text.split(',').map((e) => e.trim()));
           }
-          uniqueTags.addAll(newTags.split(', ').map((e) => e.trim()));
+          uniqueTags.addAll(aiTags);
+          uniqueTags.removeWhere((e) => e.isEmpty);
           _tags.text = uniqueTags.join(', ');
         });
       }
     } catch (e) {
-      print('Gemini Error: $e');
+      debugPrint('Gemini Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not auto-analyze the image. You can add details manually.',
+            ),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isAiScanning = false);
+      if (mounted) setState(() => _isAiScanning = false);
     }
   }
 
@@ -347,13 +371,17 @@ class _AddItemPageState extends State<AddItemPage> {
                 .map((m) => m['id'])
                 .whereType<String>()
                 .toList();
+            // Firestore's whereIn accepts at most 30 values, so fetch in
+            // chunks rather than letting a large match set throw.
             List<ItemModel> matchedItems = [];
-            if (matchIds.isNotEmpty) {
+            for (var i = 0; i < matchIds.length; i += 30) {
+              final end = (i + 30 < matchIds.length) ? i + 30 : matchIds.length;
+              final chunk = matchIds.sublist(i, end);
               final snap = await FirebaseFirestore.instance
                   .collection('items')
-                  .where(FieldPath.documentId, whereIn: matchIds)
+                  .where(FieldPath.documentId, whereIn: chunk)
                   .get();
-              matchedItems = snap.docs.map(ItemModel.fromDoc).toList();
+              matchedItems.addAll(snap.docs.map(ItemModel.fromDoc));
             }
 
             if (mounted && matchedItems.isNotEmpty) {
@@ -374,7 +402,7 @@ class _AddItemPageState extends State<AddItemPage> {
           'lat': _lat,
           'lng': _lng,
           'locationText': _locationText,
-          'updatedAt': DateTime.now(), // optional
+          'updatedAt': FieldValue.serverTimestamp(),
         });
         if (!mounted) return;
         ScaffoldMessenger.of(

@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'notification_service.dart';
 
 class AuthService {
   AuthService._();
@@ -71,6 +72,46 @@ class AuthService {
 
   /*-------------Auth actions----------------*/
 
+  /// The canonical shape of a freshly-created user document. All signup paths
+  /// (email, Google, guest upgrade, legacy login backfill) go through this so
+  /// the schema stays consistent (previously the email and Google paths wrote
+  /// different field sets).
+  Map<String, dynamic> _newUserDoc({
+    required String name,
+    required String email,
+    String? photoURL,
+  }) => {
+    'name': name,
+    'email': email,
+    'photoURL': photoURL,
+    'role': 'user',
+    'createdAt': FieldValue.serverTimestamp(),
+    'fcmTokens': <String>[],
+    'ratingCount': 0,
+    'averageRating': 0.0,
+  };
+
+  /// Creates the user's Firestore doc if it doesn't already exist. Safe to call
+  /// on every sign-in; never overwrites an existing profile.
+  Future<void> _ensureUserDoc(
+    User user, {
+    String? name,
+    String? email,
+    String? photoURL,
+  }) async {
+    final ref = _users.doc(user.uid);
+    final snap = await ref.get();
+    if (snap.exists) return;
+    await ref.set(
+      _newUserDoc(
+        name: name ?? user.displayName ?? '',
+        email: email ?? user.email ?? '',
+        photoURL: photoURL ?? user.photoURL,
+      ),
+      SetOptions(merge: true),
+    );
+  }
+
   Future<void> register({
     required String name,
     required String email,
@@ -83,14 +124,7 @@ class AuthService {
     await cred.user!.updateDisplayName(name.trim());
     await cred.user!.reload(); //ensure displayName is set
 
-    //create user doc
-    await _users.doc(cred.user!.uid).set({
-      'name': name.trim(),
-      'email': email.trim(),
-      'createdAt': FieldValue.serverTimestamp(),
-      'role': 'user',
-      'fcmTokens': [],
-    }, SetOptions(merge: true));
+    await _ensureUserDoc(cred.user!, name: name.trim(), email: email.trim());
 
     await cred.user!.sendEmailVerification();
   }
@@ -101,17 +135,7 @@ class AuthService {
       password: password,
     );
     //make sure a users doc exists (older accounts or imports)
-    final u = _auth.currentUser!;
-    final doc = await _users.doc(u.uid).get();
-    if (!doc.exists) {
-      await _users.doc(u.uid).set({
-        'name': u.displayName ?? '',
-        'email': u.email ?? email.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'role': 'user',
-        'fcmTokens': [],
-      }, SetOptions(merge: true));
-    }
+    await _ensureUserDoc(_auth.currentUser!, email: email.trim());
   }
 
   Future<void> sendPasswordReset(String email) async {
@@ -177,24 +201,11 @@ class AuthService {
     }
   }
 
-  // ignore: unused_element
   Future<void> logout() async {
-    // Remove this device's FCM token from the user doc so future
-    // notifications don't keep being sent to a phone that's signed out.
-    final user = _auth.currentUser;
-    if (user != null) {
-      try {
-        final token = await FirebaseMessaging.instance.getToken();
-        if (token != null) {
-          await _users.doc(user.uid).update({
-            'fcmTokens': FieldValue.arrayRemove([token]),
-          });
-        }
-        await FirebaseMessaging.instance.deleteToken();
-      } catch (_) {
-        // Best-effort cleanup; don't block sign-out if Firestore is unreachable.
-      }
-    }
+    // Remove this device's FCM token (and cancel the token-refresh listener)
+    // before signing out, so notifications don't target a signed-out device
+    // and a token can't bleed into the next account on this device.
+    await NotificationService.instance.clearToken();
     await _auth.signOut();
   }
 
@@ -229,77 +240,43 @@ class AuthService {
     await user.updateDisplayName(name.trim());
     await user.getIdToken(true);
 
-    await _users.doc(user.uid).set({
-      'name': name.trim(),
-      'email': email.trim(),
-      'createdAt': FieldValue.serverTimestamp(),
-      'role': 'user',
-    }, SetOptions(merge: true));
+    await _ensureUserDoc(user, name: name.trim(), email: email.trim());
 
     await user.sendEmailVerification();
   }
 
   // --- GOOGLE SIGN IN LOGIC ---
+  /// Returns the signed-in [User], or `null` ONLY when the user cancelled the
+  /// Google account picker. Any genuine failure (network, credential conflict,
+  /// Firestore write) is rethrown so the caller can show the real error rather
+  /// than a misleading "canceled" message.
   Future<User?> signInWithGoogle() async {
-    try {
-      // Trigger the google Authentication flow
-      final GoogleSignIn googleSignIn =
-          GoogleSignIn(); // Ensure this is imported
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
-      if (googleUser == null) {
-        return null;
-      }
-
-      // Obtain the auth details from the request
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      // Create a new credential
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Sign in to Firebase with the credential
-      final UserCredential userCredential = await _auth.signInWithCredential(
-        credential,
-      );
-
-      final User? user = userCredential.user;
-
-      // Save User to Firestore (if new)
-      if (user != null) {
-        // Check if user doc exists
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-
-        if (!userDoc.exists) {
-          // Create new user profile
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .set({
-                'uid': user.uid,
-                'email': user.email,
-                'name': user.displayName ?? 'Google User',
-                'role': 'user',
-                'createdAt': FieldValue.serverTimestamp(),
-                'photoURL': user.photoURL,
-                'ratingCount': 0,
-                'averageRating': 0.0,
-                'fcmTokens': [],
-              });
-        }
-      }
-
-      return user;
-    } catch (e) {
-      print("Error signing in with Google: $e");
-      return null;
+    // Trigger the Google authentication flow.
+    final googleUser = await GoogleSignIn().signIn();
+    if (googleUser == null) {
+      return null; // user cancelled the picker
     }
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    final userCredential = await _auth.signInWithCredential(credential);
+    final user = userCredential.user;
+
+    // Create the Firestore profile on first sign-in (consistent schema).
+    if (user != null) {
+      await _ensureUserDoc(
+        user,
+        name: user.displayName ?? 'Google User',
+        email: user.email ?? '',
+        photoURL: user.photoURL,
+      );
+    }
+
+    return user;
   }
 
   Future<void> saveUserToken() async {
