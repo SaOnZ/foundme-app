@@ -736,27 +736,60 @@ class ProfilePage extends StatelessWidget {
     ImageSource source,
   ) async {
     final picker = ImagePicker();
-    final file = await picker.pickImage(source: source, imageQuality: 85);
 
-    if (file != null) {
-      // Check if the widget is still mounted before showing SnackBar
+    // pickImage can throw (permission denied, no camera, plugin error); a bare
+    // await left those failures silent (M25).
+    XFile? file;
+    try {
+      file = await picker.pickImage(source: source, imageQuality: 85);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not access the image picker.')),
+      );
+      return;
+    }
+    if (file == null) return; // user cancelled
+
+    // Validate type + size before uploading.
+    final ext = file.path.toLowerCase();
+    final isImage =
+        ext.endsWith('.jpg') ||
+        ext.endsWith('.jpeg') ||
+        ext.endsWith('.png') ||
+        ext.endsWith('.webp');
+    if (!isImage) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a JPG, PNG or WebP image.')),
+      );
+      return;
+    }
+    final bytes = await file.length();
+    if (bytes > 10 * 1024 * 1024) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Image is too large (max 10MB).')),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Uploading image...')));
+
+    try {
+      await AuthService.instance.updateProfilePicture(file);
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Uploading image...')));
-
-      try {
-        await AuthService.instance.updateProfilePicture(file);
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile picture updated!')),
-        );
-      } catch (e) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
-      }
+      ).showSnackBar(const SnackBar(content: Text('Profile picture updated!')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
   }
 
@@ -769,9 +802,11 @@ class ProfilePage extends StatelessWidget {
           title: const Text('Edit Profile'),
           content: TextField(
             controller: nameController,
+            maxLength: 50,
             decoration: const InputDecoration(
               labelText: 'Display Name',
               border: OutlineInputBorder(),
+              counterText: '',
             ),
             autofocus: true,
           ),
@@ -801,7 +836,8 @@ class ProfilePage extends StatelessWidget {
           ],
         );
       },
-    );
+      // Dispose the controller once the dialog is fully gone (M24).
+    ).whenComplete(nameController.dispose);
   }
 
   void _showDeletePostDialog(BuildContext context, ItemModel item) {
@@ -855,8 +891,17 @@ class ProfilePage extends StatelessWidget {
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               onPressed: () async {
-                await AuthService.instance.logout();
-                if (context.mounted) Navigator.of(context).pop();
+                // Close the dialog FIRST: logout triggers AuthGate to swap the
+                // whole tree, after which popping a defunct route would throw.
+                final messenger = ScaffoldMessenger.of(context);
+                Navigator.of(context).pop();
+                try {
+                  await AuthService.instance.logout();
+                } catch (_) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Logout failed. Try again.')),
+                  );
+                }
               },
               child: const Text('Log Out'),
             ),
