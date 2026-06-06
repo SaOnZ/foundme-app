@@ -154,9 +154,16 @@ class ItemService {
         );
   }
 
-  /// Getx a stream for a single item from its ID.
+  /// Gets a stream for a single item from its ID.
+  ///
+  /// Skips snapshots for a deleted/non-existent doc so consumers never receive
+  /// a garbage model (and the map never throws on null data).
   Stream<ItemModel> getItemStream(String id) {
-    return _items.doc(id).snapshots().map(ItemModel.fromDoc);
+    return _items
+        .doc(id)
+        .snapshots()
+        .where((d) => d.exists)
+        .map(ItemModel.fromDoc);
   }
 
   Stream<List<ItemModel>> adminGetAllItems() {

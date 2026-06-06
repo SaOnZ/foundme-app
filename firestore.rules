@@ -49,17 +49,19 @@ service cloud.firestore {
         && (!('role' in request.resource.data) || request.resource.data.role == 'user')
         && (!('disabled' in request.resource.data) || request.resource.data.disabled == false);
 
-      // Self-update: cannot change role, disabled, or any verification
-      // field. The verifyMatricCard Cloud Function writes isVerified /
-      // matricNumber via the admin SDK, which bypasses these rules.
-      allow update: if (uidIs(uid)
-                        && request.resource.data.get('role', 'user') == resource.data.get('role', 'user')
-                        && request.resource.data.get('disabled', false) == resource.data.get('disabled', false)
-                        && request.resource.data.get('isVerified', false) == resource.data.get('isVerified', false)
-                        && request.resource.data.get('matricNumber', '') == resource.data.get('matricNumber', '')
-                        && request.resource.data.get('matricCardUrl', '') == resource.data.get('matricCardUrl', '')
-                        && request.resource.data.get('matricName', '') == resource.data.get('matricName', ''))
-                    || isAdmin();
+      // Self-update: allowlist exactly the fields a user may change about
+      // their own profile. Everything else — role, disabled, isVerified,
+      // matric*, AND averageRating/ratingCount (which only the submitReview
+      // Cloud Function may write via the admin SDK) — is immutable from the
+      // client. Using an affectedKeys allowlist (rather than per-field freezes)
+      // means any field not listed here is rejected by default, so new
+      // protected fields can't be silently forged.
+      allow update: if isAdmin()
+                    || (uidIs(uid)
+                        && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly(['name', 'photoURL', 'fcmTokens',
+                                       'fcmToken', 'lastActive']));
 
       allow delete: if isAdmin();
     }
@@ -76,13 +78,25 @@ service cloud.firestore {
         && request.resource.data.status == 'pending_approval';
 
       // Updates: owner can edit their own item but cannot self-approve.
-      // They can change status to a terminal value (closed/resolved) only.
-      // Admins can update anything (approve, reject, expire, etc).
-      allow update: if (uidIs(resource.data.ownerUid)
+      // ownerUid is immutable, status may only stay the same or move to a
+      // terminal value (closed/resolved) — the owner can never flip an item to
+      // 'active'. An affectedKeys allowlist limits owner writes to content
+      // fields, the accept-lock (acceptedClaimId), and status, so they can't
+      // inject arbitrary/privileged fields. Admins can update anything
+      // (approve, reject, expire, etc).
+      // NOTE: content fields remain editable post-approval; if bait-and-switch
+      // moderation becomes a concern, force status back to 'pending_approval'
+      // here whenever a content field changes.
+      allow update: if isAdmin()
+                    || (uidIs(resource.data.ownerUid)
                         && request.resource.data.ownerUid == resource.data.ownerUid
                         && (request.resource.data.status == resource.data.status
-                            || request.resource.data.status in ['closed', 'resolved']))
-                    || isAdmin();
+                            || request.resource.data.status in ['closed', 'resolved'])
+                        && request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasOnly(['type', 'title', 'desc', 'category',
+                                       'tags', 'lat', 'lng', 'locationText',
+                                       'updatedAt', 'status', 'acceptedClaimId']));
 
       allow delete: if uidIs(resource.data.ownerUid) || isAdmin();
     }

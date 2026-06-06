@@ -145,27 +145,7 @@ class ClaimsInboxPage extends StatelessWidget {
                           ),
                           isThreeLine: true,
                           trailing: c.status == 'pending'
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.close_rounded,
-                                        color: Colors.red,
-                                      ),
-                                      onPressed: () => ClaimService.instance
-                                          .setClaimStatus(c.id, 'declined'),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.check_rounded,
-                                        color: Colors.green,
-                                      ),
-                                      onPressed: () => ClaimService.instance
-                                          .setClaimStatus(c.id, 'accepted'),
-                                    ),
-                                  ],
-                                )
+                              ? _ClaimActionButtons(claim: c)
                               : null,
                         );
                       },
@@ -177,6 +157,84 @@ class ClaimsInboxPage extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Accept/decline buttons for a single pending claim. Owns an in-flight flag so
+/// rapid double-taps can't fire duplicate writes, awaits the transactional
+/// service call, and surfaces success/failure to the user.
+class _ClaimActionButtons extends StatefulWidget {
+  final ClaimModel claim;
+  const _ClaimActionButtons({required this.claim});
+
+  @override
+  State<_ClaimActionButtons> createState() => _ClaimActionButtonsState();
+}
+
+class _ClaimActionButtonsState extends State<_ClaimActionButtons> {
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action, String successMsg) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(successMsg)));
+    } on ClaimActionException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Something went wrong. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_busy) {
+      return const SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    final c = widget.claim;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.close_rounded, color: Colors.red),
+          onPressed: () => _run(
+            () => ClaimService.instance
+                .declineClaim(claimId: c.id, itemId: c.itemId),
+            'Declined',
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.check_rounded, color: Colors.green),
+          onPressed: () => _run(
+            () => ClaimService.instance
+                .acceptClaim(claimId: c.id, itemId: c.itemId),
+            'Accepted',
+          ),
+        ),
+      ],
     );
   }
 }

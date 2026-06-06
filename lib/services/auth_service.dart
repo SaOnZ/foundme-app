@@ -129,7 +129,13 @@ class AuthService {
     final u = _auth.currentUser;
     if (u == null) return false;
     await u.reload();
-    return _auth.currentUser!.emailVerified;
+    final verified = _auth.currentUser?.emailVerified ?? false;
+    if (verified) {
+      // Force an ID-token refresh so AuthGate's idTokenChanges stream re-emits
+      // with the updated emailVerified flag and re-routes the user.
+      await _auth.currentUser?.getIdToken(true);
+    }
+    return verified;
   }
 
   Future<void> updateDisplayName(String name) async {
@@ -293,6 +299,23 @@ class AuthService {
     } catch (e) {
       print("Error signing in with Google: $e");
       return null;
+    }
+  }
+
+  Future<void> saveUserToken() async {
+    final user = currentUser;
+    if (user == null) return;
+
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await _users.doc(user.uid).set({
+          'fcmTokens': FieldValue.arrayUnion([token]),
+          'lastActive': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Failed to save FCM token: $e');
     }
   }
 }

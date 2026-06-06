@@ -49,7 +49,9 @@ class ItemModel {
   };
 
   factory ItemModel.fromDoc(DocumentSnapshot d) {
-    final m = d.data() as Map<String, dynamic>;
+    // A deleted/non-existent doc still produces a valid snapshot whose data()
+    // is null; degrade to defaults instead of throwing on the cast.
+    final m = (d.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
 
     // Helpers that won't crash on odd types
     String _asString(dynamic v) => v?.toString() ?? '';

@@ -17,11 +17,41 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final _c = TextEditingController();
+  bool _actionBusy = false;
 
   @override
   void dispose() {
     _c.dispose();
     super.dispose();
+  }
+
+  /// Runs an owner claim action (accept/decline) guarding against double-tap
+  /// and surfacing a user-facing message on success/failure.
+  Future<void> _runClaimAction(
+    Future<void> Function() action,
+    String successMsg,
+  ) async {
+    if (_actionBusy) return;
+    setState(() => _actionBusy = true);
+    try {
+      await action();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(successMsg)));
+    } on ClaimActionException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Something went wrong. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
   }
 
   Widget _buildSafetyNudge(BuildContext context) {
@@ -127,32 +157,28 @@ class _ChatPageState extends State<ChatPage> {
                 IconButton(
                   tooltip: 'Decline',
                   icon: const Icon(Icons.cancel_outlined),
-                  onPressed: () async {
-                    await ClaimService.instance.setClaimStatus(
-                      widget.claimId,
-                      'declined',
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('Declined')));
-                    }
-                  },
+                  onPressed: _actionBusy
+                      ? null
+                      : () => _runClaimAction(
+                          () => ClaimService.instance.declineClaim(
+                            claimId: widget.claimId,
+                            itemId: (data['itemId'] ?? '') as String,
+                          ),
+                          'Declined',
+                        ),
                 ),
                 IconButton(
                   tooltip: 'Accept',
                   icon: const Icon(Icons.check_circle_outline),
-                  onPressed: () async {
-                    await ClaimService.instance.setClaimStatus(
-                      widget.claimId,
-                      'accepted',
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('Accepted')));
-                    }
-                  },
+                  onPressed: _actionBusy
+                      ? null
+                      : () => _runClaimAction(
+                          () => ClaimService.instance.acceptClaim(
+                            claimId: widget.claimId,
+                            itemId: (data['itemId'] ?? '') as String,
+                          ),
+                          'Accepted',
+                        ),
                 ),
               ],
               if (isOwner && status == 'accepted')

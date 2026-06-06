@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -75,28 +73,12 @@ class _LoginPageState extends State<LoginPage> {
         password: _pass.text,
       );
 
-      final User? user = FirebaseAuth.instance.currentUser;
-
-      if (user != null) {
-        final DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-
-        // DocumentSnapshot.get(field) throws StateError when the field is
-        // missing (e.g. older accounts that pre-date the role column), so
-        // the previous `?? 'student'` fallback was unreachable. Read the
-        // raw map and default to 'user' to match firestore.rules.
-        final data = userDoc.data() as Map<String, dynamic>?;
-        final String role = (data?['role'] as String?) ?? 'user';
-
-        if (mounted) {
-          if (role == 'admin') {
-            Navigator.pushReplacementNamed(context, '/admin');
-          } else {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
-        }
+      // Route through AuthGate, which is the single source of truth for
+      // where a signed-in user belongs (admin / matric verification /
+      // email verification / home). This also enforces the email-verification
+      // and matric gates that a direct push to /home would bypass.
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
       }
     } catch (e) {
       // 3. Handle Firebase errors nicely
@@ -123,7 +105,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _loading = true);
     try {
       await AuthService.instance.continueAsGuest();
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
     } catch (e) {
       if (mounted) {
         _showErrorDialog("Guest sign-infailed: $e");

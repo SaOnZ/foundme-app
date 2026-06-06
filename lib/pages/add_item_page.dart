@@ -74,6 +74,7 @@ class _AddItemPageState extends State<AddItemPage> {
     _title.dispose();
     _desc.dispose();
     _tags.dispose();
+    _locationController.dispose();
     super.dispose();
   }
 

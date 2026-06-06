@@ -110,7 +110,9 @@ class _RegisterPageState extends State<RegisterPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pushNamedAndRemoveUntil(context, '/verify', (_) => false);
+      // Route through AuthGate; the new account is signed in but unverified,
+      // so AuthGate will land them on the VerifyEmailPage.
+      Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
     } on Exception catch (e) {
       if (!mounted) return;
 

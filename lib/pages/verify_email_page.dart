@@ -26,7 +26,10 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       final ok = await AuthService.instance.checkEmailVerified();
       if (!mounted) return;
       if (ok) {
-        Navigator.pushNamedAndRemoveUntil(context, '/home', (_) => false);
+        // Route back through AuthGate so it can send the user to the next
+        // required step (matric verification) or home, rather than skipping
+        // straight to /home.
+        Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
