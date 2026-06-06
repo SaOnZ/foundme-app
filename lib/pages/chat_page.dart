@@ -117,11 +117,15 @@ class _ChatPageState extends State<ChatPage> {
               },
             ),
             // --- ACTIONS ---
+            // Claim state transitions (accept/decline/resolve) are owner-only
+            // per firestore.rules: the claimer can only push status to
+            // 'closed', and rating the owner happens from MyClaimsPage once
+            // the claim is closed. Showing these buttons to the claimer used
+            // to silently fail at the rules layer.
             actions: [
-              if (!isOwner) const SizedBox.shrink(),
-              if (status == 'pending') ...[
+              if (isOwner && status == 'pending') ...[
                 IconButton(
-                  tooltip: 'Reject',
+                  tooltip: 'Decline',
                   icon: const Icon(Icons.cancel_outlined),
                   onPressed: () async {
                     await ClaimService.instance.setClaimStatus(
@@ -137,9 +141,7 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 IconButton(
                   tooltip: 'Accept',
-                  icon: const Icon(
-                    Icons.check_circle_outline,
-                  ), // <-- FIX 1: 'icon'
+                  icon: const Icon(Icons.check_circle_outline),
                   onPressed: () async {
                     await ClaimService.instance.setClaimStatus(
                       widget.claimId,
@@ -153,28 +155,27 @@ class _ChatPageState extends State<ChatPage> {
                   },
                 ),
               ],
-              if (status == 'accepted')
+              if (isOwner && status == 'accepted')
                 IconButton(
                   tooltip: 'Mark resolved',
                   icon: const Icon(Icons.check_circle_outline),
                   onPressed: () async {
                     try {
                       await ClaimService.instance.closeClaimAndItem(
-                        // <-- FIX 2: 'closeClaimAndItem'
                         widget.claimId,
                         data['itemId'],
                       );
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        // <-- FIX 3: 'showSnackBar'
                         const SnackBar(content: Text('Closed ✔')),
                       );
 
-                      final claimerUid =
-                          data['claimerUid']; // <-- FIX 4: Missing '
-                      final claimerProfile = await AuthService.instance
-                          .getUserProfile(claimerUid);
-                      final claimerName = // <-- FIX 5: 'claimerName'
+                      final claimerUid = data['claimerUid'] as String?;
+                      final claimerProfile = claimerUid == null
+                          ? null
+                          : await AuthService.instance
+                                .getUserProfile(claimerUid);
+                      final claimerName =
                           claimerProfile?.name ?? 'the Claimer';
 
                       if (!context.mounted) return;
@@ -185,8 +186,7 @@ class _ChatPageState extends State<ChatPage> {
                         builder: (_) => RatingDialog(
                           claimId: widget.claimId,
                           roleToReview: 'claimer',
-                          personToReviewName:
-                              claimerName, // <-- FIX 5: 'claimerName'
+                          personToReviewName: claimerName,
                         ),
                       );
                     } catch (e) {

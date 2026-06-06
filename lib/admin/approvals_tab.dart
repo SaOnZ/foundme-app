@@ -108,20 +108,32 @@ class ApprovalsTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
 
-                        // User Matric Fetcher
-                        FutureBuilder<DocumentSnapshot>(
-                          future: FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(item.ownerUid)
-                              .get(),
+                        // User Matric Fetcher.
+                        // Pulls the public name from /users and the
+                        // sensitive matric fields from the admin-only
+                        // /verifications collection in parallel.
+                        FutureBuilder<List<DocumentSnapshot>>(
+                          future: Future.wait([
+                            FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(item.ownerUid)
+                                .get(),
+                            FirebaseFirestore.instance
+                                .collection('verifications')
+                                .doc(item.ownerUid)
+                                .get(),
+                          ]),
                           builder: (context, userSnap) {
                             if (!userSnap.hasData)
                               return const LinearProgressIndicator();
-                            final data =
-                                userSnap.data!.data() as Map<String, dynamic>?;
-                            final matricUrl = data?['matricCardUrl'];
-                            final name = data?['name'] ?? 'Unknown';
-                            final matricNo = data?['matricNumber'] ?? 'N/A';
+                            final userData =
+                                userSnap.data![0].data() as Map<String, dynamic>?;
+                            final verifData =
+                                userSnap.data![1].data() as Map<String, dynamic>?;
+                            final matricUrl = verifData?['matricCardUrl'];
+                            final name = userData?['name'] ?? 'Unknown';
+                            final matricNo =
+                                verifData?['matricNumber'] ?? 'N/A';
 
                             return Container(
                               padding: const EdgeInsets.all(12),

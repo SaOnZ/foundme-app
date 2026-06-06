@@ -83,8 +83,12 @@ class _LoginPageState extends State<LoginPage> {
             .doc(user.uid)
             .get();
 
-        final String role = userDoc.get('role') ?? 'student';
-        print("👮 Role detected: '$role'"); // DEBUG
+        // DocumentSnapshot.get(field) throws StateError when the field is
+        // missing (e.g. older accounts that pre-date the role column), so
+        // the previous `?? 'student'` fallback was unreachable. Read the
+        // raw map and default to 'user' to match firestore.rules.
+        final data = userDoc.data() as Map<String, dynamic>?;
+        final String role = (data?['role'] as String?) ?? 'user';
 
         if (mounted) {
           if (role == 'admin') {

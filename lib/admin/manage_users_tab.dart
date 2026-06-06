@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
@@ -219,10 +218,8 @@ class ManageUsersTab extends StatelessWidget {
     try {
       final callable = FirebaseFunctions.instance.httpsCallable('disableUser');
       await callable.call({'uid': uid});
-
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'disabled': true,
-      });
+      // The Cloud Function writes `disabled: true` on the user doc itself,
+      // so no client-side mirror write is needed.
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

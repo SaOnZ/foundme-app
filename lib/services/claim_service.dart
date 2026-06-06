@@ -43,7 +43,8 @@ class ClaimService {
   }
 
   Future<void> setClaimStatus(String claimId, String status) async {
-    // status in: pending | accepted | rejected | closed
+    // status in: pending | accepted | declined | closed
+    // (whitelisted in firestore.rules — anything else will be rejected).
     await _claims.doc(claimId).update({'status': status});
   }
 

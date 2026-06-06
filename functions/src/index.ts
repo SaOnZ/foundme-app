@@ -25,6 +25,34 @@ function extractJson(raw: string, openChar: "{" | "["): string | null {
   return raw.substring(start, end + 1);
 }
 
+// FCM rejects requests with these error codes when the token is dead.
+// Strip them out of the user's fcmTokens array so we stop trying.
+const DEAD_FCM_ERRORS = new Set([
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+  "messaging/invalid-argument",
+]);
+
+async function pruneDeadTokens(
+  uid: string,
+  tokens: string[],
+  responses: Array<{ success: boolean; error?: { code?: string } }>,
+): Promise<void> {
+  const dead: string[] = [];
+  responses.forEach((r, i) => {
+    const code = r.error?.code;
+    if (!r.success && code && DEAD_FCM_ERRORS.has(code)) dead.push(tokens[i]);
+  });
+  if (dead.length === 0) return;
+  try {
+    await db.collection("users").doc(uid).update({
+      fcmTokens: admin.firestore.FieldValue.arrayRemove(...dead),
+    });
+  } catch (e) {
+    logger.warn(`Failed to prune ${dead.length} dead tokens for ${uid}:`, e);
+  }
+}
+
 // ===================================================================
 //  NEW FUNCTION: submitReview (Callable Function)
 // ===================================================================
@@ -74,7 +102,7 @@ export const submitReview = onCall(async (request) => {
   }
 
   // 5. Determine who is being reviewed
-  let recipientUid: String;
+  let recipientUid: string;
   let reviewFieldToUpdate: string;
 
   if (roleToReview === "claimer") {
@@ -117,7 +145,7 @@ export const submitReview = onCall(async (request) => {
   // 6. Run a transaction to update the rating and claim
   try {
     await db.runTransaction(async (transaction) => {
-      const userRef = db.collection("users").doc(String(recipientUid));
+      const userRef = db.collection("users").doc(recipientUid);
       const userDoc = await transaction.get(userRef);
 
       if (!userDoc.exists) {
@@ -148,7 +176,7 @@ export const submitReview = onCall(async (request) => {
       });
     });
 
-    logger.log('Review submitted for user ${recipientUid} by ${callerUid}.');
+    logger.log(`Review submitted for user ${recipientUid} by ${callerUid}.`);
     return { success: true, message: "Review submitted!" };
   } catch (error) {
     logger.error("Error submitting review:", error);
@@ -189,22 +217,23 @@ export const disableUser = onCall(async (request) => {
   }
 
   try {
-    // 5. Disable the user in Firebase Authentication
-    // This blocks them from logging in.
+    // 5. Disable the user in Firebase Authentication (blocks login).
     await admin.auth().updateUser(uidToDisable, {
       disabled: true,
     });
 
-    // 6. Update their Firestore role
-    // Helps app UI know they are disabled.
+    // 6. Mirror the flag onto the user doc so the UI can render a banned
+    //    badge. We deliberately do NOT touch `role` — overwriting it would
+    //    erase admin status and is unnecessary since auth.disabled already
+    //    blocks sign-in.
     await db.collection("users").doc(uidToDisable).update({
-      role: "disabled",
+      disabled: true,
     });
 
-    logger.log('Admin: ${callerUid} successfully disabled user ${uidToDisable}');
+    logger.log(`Admin ${callerUid} disabled user ${uidToDisable}`);
     return { success: true, message: "User has been disabled." };
   } catch (error) {
-    logger.error('Error disabling user ${uidToDisable}:', error);
+    logger.error(`Error disabling user ${uidToDisable}:`, error);
     throw new HttpsError("internal", "An error occured while disabling the user.");
   }
 })
@@ -269,6 +298,8 @@ export const sendAdminNotification = onCall(async (request) => {
     },
   });
 
+  await pruneDeadTokens(targetUid, tokens, response.responses);
+
   logger.log(
     `Admin ${callerUid} notified ${targetUid}: ` +
       `${response.successCount}/${tokens.length} delivered.`,
@@ -327,6 +358,7 @@ export const onNewClaimV2 = onDocumentCreated("claims/{claimId}", async (event) 
         notification: { channelId: "high_importance_channel" },
       },
     });
+    await pruneDeadTokens(ownerUid, tokens, response.responses);
     logger.log(
       `Sent 'New Claim' to ${ownerUid}: ` +
         `${response.successCount}/${tokens.length} delivered.`,
@@ -396,6 +428,7 @@ export const onNewMessageV2 = onDocumentCreated("messages/{messageId}", async (e
         notification: { channelId: "high_importance_channel" },
       },
     });
+    await pruneDeadTokens(recipientUid, tokens, response.responses);
     logger.log(
       `Sent 'New Message' to ${recipientUid}: ` +
         `${response.successCount}/${tokens.length} delivered.`,
@@ -542,8 +575,10 @@ export const verifyMatricCard = onCall(
     }
 
     // Reject if this matric number is already linked to a different user.
+    // Sensitive identity fields live in /verifications/{uid}; the duplicate
+    // check queries that collection (admin SDK bypasses rules).
     const dup = await db
-      .collection("users")
+      .collection("verifications")
       .where("matricNumber", "==", parsed.matric_no)
       .limit(1)
       .get();
@@ -559,12 +594,23 @@ export const verifyMatricCard = onCall(
       expires: "01-01-2100",
     });
 
-    await db.collection("users").doc(callerUid).update({
-      isVerified: true,
+    // Write sensitive fields to the admin-only verifications collection.
+    await db.collection("verifications").doc(callerUid).set({
       matricNumber: parsed.matric_no,
       matricName: parsed.name || null,
       matricCardUrl: downloadUrl,
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // The user doc only carries the boolean flag and a verification date.
+    // Strip any legacy matric fields so existing leaky docs migrate
+    // themselves on next verification.
+    await db.collection("users").doc(callerUid).update({
+      isVerified: true,
       verificationDate: admin.firestore.FieldValue.serverTimestamp(),
+      matricNumber: admin.firestore.FieldValue.delete(),
+      matricName: admin.firestore.FieldValue.delete(),
+      matricCardUrl: admin.firestore.FieldValue.delete(),
     });
 
     logger.log(`Matric card verified for ${callerUid}.`);
@@ -668,3 +714,48 @@ export const findMatchingItems = onCall(
     }
   },
 );
+
+// migrateLegacyMatricFields — one-shot admin tool. Walks the users
+// collection, copies any leftover matricNumber / matricName / matricCardUrl
+// into /verifications/{uid}, then deletes those fields from the user doc.
+// Run once after deploying the verifications-collection split, then forget.
+export const migrateLegacyMatricFields = onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new HttpsError("unauthenticated", "You must be logged in.");
+  }
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  if (callerDoc.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "Admin only.");
+  }
+
+  const snap = await db.collection("users").get();
+  let migrated = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const hasLegacy =
+      data.matricNumber || data.matricName || data.matricCardUrl;
+    if (!hasLegacy) continue;
+
+    await db.collection("verifications").doc(doc.id).set(
+      {
+        matricNumber: data.matricNumber ?? null,
+        matricName: data.matricName ?? null,
+        matricCardUrl: data.matricCardUrl ?? null,
+        verifiedAt:
+          data.verificationDate ?? admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    await doc.ref.update({
+      matricNumber: admin.firestore.FieldValue.delete(),
+      matricName: admin.firestore.FieldValue.delete(),
+      matricCardUrl: admin.firestore.FieldValue.delete(),
+    });
+    migrated++;
+  }
+
+  logger.log(`migrateLegacyMatricFields: moved ${migrated} user(s).`);
+  return { success: true, migrated };
+});

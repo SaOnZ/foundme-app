@@ -38,10 +38,9 @@ service cloud.firestore {
 
     // ----- users -----
     match /users/{uid} {
-      // Anyone signed in (incl. anonymous browsing) can read profiles. The
-      // existing user doc holds matric fields and email; long-term these
-      // should move into a private subcollection. TODO: split public profile
-      // from private fields.
+      // Public-ish profile (name, photoURL, role flag, ratings). Sensitive
+      // identity data (matric number, card URL) lives in /verifications/{uid}
+      // and is admin-readable only.
       allow read: if isSignedIn();
 
       // Self-create on first sign-in. Block role/disabled escalation. Allow
@@ -102,14 +101,16 @@ service cloud.firestore {
         && request.resource.data.ownerUid != request.auth.uid
         && request.resource.data.status == 'pending';
 
-      // Update: parties can change status. Owner can accept/reject/close;
-      // claimer can only set 'closed'. Immutable fields and review flags
-      // (which the submitReview Cloud Function controls) cannot be changed
-      // from the client.
+      // Update: parties can change status. Owner can accept/decline/close;
+      // claimer can only set 'closed'. Status is whitelisted so an owner
+      // can't pin arbitrary strings into the field. Review flags (which the
+      // submitReview Cloud Function controls) and identity fields are
+      // immutable from the client.
       allow update: if isSignedIn()
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.claimerUid == resource.data.claimerUid
         && request.resource.data.itemId == resource.data.itemId
+        && request.resource.data.status in ['pending', 'accepted', 'declined', 'closed']
         && request.resource.data.get('ownerHasReviewed', false) == resource.data.get('ownerHasReviewed', false)
         && request.resource.data.get('claimerHasReviewed', false) == resource.data.get('claimerHasReviewed', false)
         && (uidIs(resource.data.ownerUid)
@@ -145,6 +146,15 @@ service cloud.firestore {
     // ----- logs -----
     match /logs/{logId} {
       allow read, create, update, delete: if isAdmin();
+    }
+
+    // ----- verifications -----
+    // Holds the sensitive matric data (number, name, signed card URL) that
+    // used to live on the user doc. Only admins read it; only the
+    // verifyMatricCard Cloud Function writes it (admin SDK bypasses rules).
+    match /verifications/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Default deny.
