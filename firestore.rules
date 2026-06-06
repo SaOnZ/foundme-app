@@ -116,10 +116,10 @@ service cloud.firestore {
         && request.resource.data.status == 'pending';
 
       // Update: parties can change status. Owner can accept/decline/close;
-      // claimer can only set 'closed'. Status is whitelisted so an owner
-      // can't pin arbitrary strings into the field. Review flags (which the
-      // submitReview Cloud Function controls) and identity fields are
-      // immutable from the client.
+      // claimer can set 'closed', or re-open their own *declined* claim back to
+      // 'pending' (re-claim). Status is whitelisted so an owner can't pin
+      // arbitrary strings into the field. Review flags (which the submitReview
+      // Cloud Function controls) and identity fields are immutable from client.
       allow update: if isSignedIn()
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.claimerUid == resource.data.claimerUid
@@ -129,7 +129,9 @@ service cloud.firestore {
         && request.resource.data.get('claimerHasReviewed', false) == resource.data.get('claimerHasReviewed', false)
         && (uidIs(resource.data.ownerUid)
             || (uidIs(resource.data.claimerUid)
-                && request.resource.data.status == 'closed'));
+                && (request.resource.data.status == 'closed'
+                    || (request.resource.data.status == 'pending'
+                        && resource.data.status == 'declined'))));
 
       allow delete: if isAdmin();
     }

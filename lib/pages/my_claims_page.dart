@@ -138,14 +138,20 @@ class MyClaimsPage extends StatelessWidget {
                       contentPadding: const EdgeInsets.all(12),
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: itemPhotoUrl,
-                          width: 50,
-                          height: 50,
-                          fit: BoxFit.cover,
-                          errorWidget: (context, url, error) =>
-                              const Icon(Icons.image_not_supported),
-                        ),
+                        child: itemPhotoUrl.isEmpty
+                            ? const SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: Icon(Icons.image_not_supported),
+                              )
+                            : CachedNetworkImage(
+                                imageUrl: itemPhotoUrl,
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.cover,
+                                errorWidget: (context, url, error) =>
+                                    const Icon(Icons.image_not_supported),
+                              ),
                       ),
                       title: Text(
                         'Item: $itemName',

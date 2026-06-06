@@ -17,38 +17,59 @@ class ClaimService {
   ClaimService._();
   static final instance = ClaimService._();
 
+  /// Hard cap on a single message / initial claim message. Keeps a chat doc
+  /// well under Firestore's 1 MB limit and blocks pathological pastes (M14).
+  static const maxMessageLength = 2000;
+
   final _db = FirebaseFirestore.instance;
   CollectionReference get _claims => _db.collection('claims');
   CollectionReference get _messages => _db.collection('messages');
 
-  /// Create a claim; prevents duplicate active claims by the same claimer on the same item.
+  String _clampMessage(String s) {
+    final t = s.trim();
+    return t.length > maxMessageLength ? t.substring(0, maxMessageLength) : t;
+  }
+
+  /// Create a claim. Uses a deterministic doc id (`${itemId}_${uid}`) so there
+  /// is exactly one claim per (item, claimer) and a rapid double-tap can't
+  /// create two docs (the old get-then-set had a TOCTOU window). Runs in a
+  /// transaction: an existing live claim is returned as-is; a previously
+  /// declined claim is re-opened as a fresh pending claim.
   Future<String> createClaim({
     required String itemId,
     required String ownerUid,
     required String initialMessage,
   }) async {
     final uid = AuthService.instance.currentUser!.uid;
-    // block duplicate pending/accepted claims by same user on same item
-    final dup = await _claims
-        .where('itemId', isEqualTo: itemId)
-        .where('claimerUid', isEqualTo: uid)
-        .where('status', whereIn: [ClaimStatus.pending, ClaimStatus.accepted])
-        .limit(1)
-        .get();
-    if (dup.docs.isNotEmpty) {
-      return dup.docs.first.id;
-    }
+    final claimRef = _claims.doc('${itemId}_$uid');
 
-    final doc = _claims.doc();
-    await doc.set({
-      'itemId': itemId,
-      'ownerUid': ownerUid,
-      'claimerUid': uid,
-      'message': initialMessage.trim(),
-      'status': ClaimStatus.pending,
-      'createdAt': FieldValue.serverTimestamp(),
+    await _db.runTransaction((txn) async {
+      final snap = await txn.get(claimRef);
+      if (snap.exists) {
+        final status = ClaimStatus.normalize(
+          (snap.data() as Map<String, dynamic>)['status'] as String?,
+        );
+        // pending / accepted / closed: keep the existing claim (idempotent).
+        if (status != ClaimStatus.declined) return;
+        // Previously declined → let them try again with a fresh message.
+        txn.update(claimRef, {
+          'status': ClaimStatus.pending,
+          'message': _clampMessage(initialMessage),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+      txn.set(claimRef, {
+        'itemId': itemId,
+        'ownerUid': ownerUid,
+        'claimerUid': uid,
+        'message': _clampMessage(initialMessage),
+        'status': ClaimStatus.pending,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     });
-    return doc.id;
+
+    return claimRef.id;
   }
 
   /// Accept a claim. Runs in a transaction so a rapid double-tap or a second
@@ -165,10 +186,14 @@ class ClaimService {
   // Chat
   Future<void> sendMessage(String claimId, String text) async {
     final uid = AuthService.instance.currentUser!.uid;
+    final clean = text.trim();
+    if (clean.isEmpty) return;
     await _messages.add({
       'claimId': claimId,
       'senderUid': uid,
-      'text': text.trim(),
+      'text': clean.length > maxMessageLength
+          ? clean.substring(0, maxMessageLength)
+          : clean,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -189,16 +214,30 @@ class ClaimService {
         });
   }
 
+  /// Close a claim and its item together. The [itemId] passed by the caller is
+  /// only a hint: the claim's own `itemId` is authoritative, so a widget can't
+  /// close an unrelated item by supplying a different id. Runs in a transaction
+  /// so the two updates can't half-apply.
   Future<void> closeClaimAndItem(String claimId, String itemId) async {
-    final db = FirebaseFirestore.instance;
-    final batch = db.batch();
-    batch.update(db.collection('claims').doc(claimId), {
-      'status': ClaimStatus.closed,
+    await _db.runTransaction((txn) async {
+      final claimRef = _claims.doc(claimId);
+      final claimSnap = await txn.get(claimRef);
+      if (!claimSnap.exists) {
+        throw ClaimActionException('This claim no longer exists.');
+      }
+      final claim = claimSnap.data() as Map<String, dynamic>;
+      final realItemId = (claim['itemId'] as String?) ?? '';
+      if (realItemId.isEmpty) {
+        throw ClaimActionException('This claim is missing its item reference.');
+      }
+      if (itemId.isNotEmpty && itemId != realItemId) {
+        throw ClaimActionException('This claim is not linked to that item.');
+      }
+      txn.update(claimRef, {'status': ClaimStatus.closed});
+      txn.update(_db.collection('items').doc(realItemId), {
+        'status': ItemStatus.closed,
+      });
     });
-    batch.update(db.collection('items').doc(itemId), {
-      'status': ItemStatus.closed,
-    });
-    await batch.commit();
   }
 
   Stream<QuerySnapshot> streamUserClaimForItem(String itemId, String userId) {

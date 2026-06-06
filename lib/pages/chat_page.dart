@@ -387,8 +387,13 @@ class _ChatPageState extends State<ChatPage> {
                         Expanded(
                           child: TextField(
                             controller: _c,
+                            maxLength: ClaimService.maxMessageLength,
+                            maxLines: null,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
                             decoration: const InputDecoration(
                               hintText: 'Type a message',
+                              counterText: '',
                             ),
                           ),
                         ),

@@ -57,14 +57,35 @@ class MyPostsPage extends StatelessWidget {
             separatorBuilder: (context, index) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final it = items[i];
-              final img = it.photos.isNotEmpty
+              final firstPhoto = it.photos.isNotEmpty ? it.photos.first : '';
+              final img = firstPhoto.isNotEmpty
                   ? Image.network(
-                      it.photos.first,
+                      firstPhoto,
                       width: 80,
                       height: 80,
                       fit: BoxFit.cover,
+                      // A broken/expired URL must not throw a red error box.
+                      errorBuilder: (_, __, ___) => const SizedBox(
+                        width: 80,
+                        height: 80,
+                        child: Icon(Icons.broken_image, color: Colors.grey),
+                      ),
+                      loadingBuilder: (ctx, child, progress) =>
+                          progress == null
+                          ? child
+                          : const SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: Center(
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
                     )
-                  : const SizedBox(width: 80, height: 80);
+                  : const SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Icon(Icons.image_not_supported, color: Colors.grey),
+                    );
 
               return ListTile(
                 leading: ClipRRect(
