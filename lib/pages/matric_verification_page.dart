@@ -15,7 +15,23 @@ class MatricVerificationPage extends StatefulWidget {
 class _MatricVerificationPageState extends State<MatricVerificationPage> {
   File? _image;
   bool _isScanning = false;
+  bool _loggingOut = false;
   String? _errorMsg;
+
+  Future<void> _logout() async {
+    if (_loggingOut) return;
+    setState(() => _loggingOut = true);
+    try {
+      await AuthService.instance.logout();
+      // AuthGate reacts to the auth stream and routes back to login.
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loggingOut = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logout failed. Please try again.')),
+      );
+    }
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
@@ -171,9 +187,7 @@ class _MatricVerificationPageState extends State<MatricVerificationPage> {
                 "Cancel & Logout",
                 style: TextStyle(color: Colors.grey),
               ),
-              onPressed: () async {
-                await AuthService.instance.logout();
-              },
+              onPressed: _loggingOut ? null : _logout,
             ),
 
             if (_errorMsg != null) ...[

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/item.dart';
+import '../models/status.dart';
 import '../pages/item_detail_page.dart';
 import '../services/item_service.dart';
 
@@ -40,10 +41,14 @@ class ManageItemsTab extends StatelessWidget {
             final item = items[i];
 
             // Determine status color
+            final status = ItemStatus.normalize(item.status);
             Color statusColor = Colors.grey;
-            if (item.status == 'active') statusColor = Colors.green;
-            if (item.status == 'pending_approval') statusColor = Colors.orange;
-            if (item.status == 'closed' || item.status == 'expired')
+            if (status == ItemStatus.active) statusColor = Colors.green;
+            if (status == ItemStatus.pendingApproval)
+              statusColor = Colors.orange;
+            if (status == ItemStatus.closed ||
+                status == ItemStatus.expired ||
+                status == ItemStatus.rejected)
               statusColor = Colors.red;
 
             return ListTile(
@@ -113,7 +118,8 @@ class ManageItemsTab extends StatelessWidget {
                     ItemService.instance.reopenItem(item.id);
                 },
                 itemBuilder: (ctx) => [
-                  if (item.status != 'closed' && item.status != 'expired')
+                  if (status == ItemStatus.active ||
+                      status == ItemStatus.pendingApproval)
                     const PopupMenuItem(
                       value: 'close',
                       child: Row(
@@ -124,7 +130,9 @@ class ManageItemsTab extends StatelessWidget {
                         ],
                       ),
                     ),
-                  if (item.status == 'closed' || item.status == 'expired')
+                  if (status == ItemStatus.closed ||
+                      status == ItemStatus.expired ||
+                      status == ItemStatus.rejected)
                     const PopupMenuItem(
                       value: 'active',
                       child: Row(

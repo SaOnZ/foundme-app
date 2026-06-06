@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'auth_service.dart';
 import '../models/item.dart';
+import '../models/status.dart';
 import 'package:mime/mime.dart';
 import '../services/log_service.dart';
 
@@ -30,11 +31,11 @@ class ItemService {
   }
 
   Future<void> closeItem(String id) async {
-    await updateItem(id, {'status': 'closed'});
+    await updateItem(id, {'status': ItemStatus.closed});
   }
 
   Future<void> reopenItem(String id) async {
-    await updateItem(id, {'status': 'active'});
+    await updateItem(id, {'status': ItemStatus.active});
   }
 
   Future<void> deleteItem(ItemModel it) async {
@@ -98,7 +99,7 @@ class ItemService {
       'lng': lng,
       'locationText': locationText,
       'photos': urls,
-      'status': 'pending_approval',
+      'status': ItemStatus.pendingApproval,
       'postedAt': FieldValue.serverTimestamp(),
     });
     return doc.id;
@@ -113,7 +114,7 @@ class ItemService {
     final Timestamp cutoffTs = Timestamp.fromDate(cutoff);
 
     return _items
-        .where('status', isEqualTo: 'active')
+        .where('status', isEqualTo: ItemStatus.active)
         .where('postedAt', isGreaterThan: cutoffTs) // only get newer items
         .orderBy('postedAt', descending: true)
         .limit(50)
@@ -136,7 +137,7 @@ class ItemService {
     final DateTime cutoff = DateTime.now().subtract(_expiryDuration);
     final Timestamp cutoffTs = Timestamp.fromDate(cutoff);
     return _items
-        .where('status', isEqualTo: 'active')
+        .where('status', isEqualTo: ItemStatus.active)
         .where('postedAt', isGreaterThan: cutoffTs)
         .orderBy('postedAt', descending: true)
         .snapshots()
@@ -217,7 +218,7 @@ class ItemService {
           .collection('items')
           .where('type', isEqualTo: targetType)
           .where('category', isEqualTo: category)
-          .where('status', isEqualTo: 'active') // Only match active items
+          .where('status', isEqualTo: ItemStatus.active) // Only match active items
           .orderBy('postedAt', descending: true) // Newest first
           .limit(20) // Limit to 20 to save AI tokens
           .get();
@@ -238,7 +239,7 @@ class ItemService {
 
     // Find active items older than cutoff
     final snapshot = await _items
-        .where('status', isEqualTo: 'active')
+        .where('status', isEqualTo: ItemStatus.active)
         .where('postedAt', isLessThan: cutoffTs)
         .get();
 
@@ -247,7 +248,7 @@ class ItemService {
     int count = 0;
 
     for (var doc in snapshot.docs) {
-      batch.update(doc.reference, {'status': 'expired'});
+      batch.update(doc.reference, {'status': ItemStatus.expired});
       count++;
 
       final data = doc.data() as Map<String, dynamic>;
@@ -270,7 +271,7 @@ class ItemService {
 
   Stream<List<ItemModel>> getPendingApprovalItems() {
     return _items
-        .where('status', isEqualTo: 'pending_approval')
+        .where('status', isEqualTo: ItemStatus.pendingApproval)
         .orderBy('postedAt', descending: true)
         .snapshots()
         .map((s) => s.docs.map(ItemModel.fromDoc).toList());
@@ -290,10 +291,10 @@ class ItemService {
 
       if (ownerUid != null) {
         // Prepare Message based on Status
-        String titleMsg = newStatus == 'active'
+        String titleMsg = newStatus == ItemStatus.active
             ? 'Post Approved! ✅'
             : 'Post Rejected ❌';
-        String bodyMsg = newStatus == 'active'
+        String bodyMsg = newStatus == ItemStatus.active
             ? 'Your item "$title" is now visible in the feed.'
             : 'Your post "$title" was not approved.';
 

@@ -12,6 +12,7 @@ class VerifyEmailPage extends StatefulWidget {
 class _VerifyEmailPageState extends State<VerifyEmailPage> {
   bool _checking = false;
   bool _canResend = true;
+  bool _loggingOut = false;
   Timer? _timer;
 
   @override
@@ -46,15 +47,39 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
 
   Future<void> _resend() async {
     if (!_canResend) return;
-    await AuthService.instance.resendVerificationEmail();
-    setState(() => _canResend = false);
-    _timer = Timer(const Duration(seconds: 30), () {
-      if (mounted) setState(() => _canResend = true);
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Verification email sent again.')),
-    );
+    try {
+      await AuthService.instance.resendVerificationEmail();
+      if (!mounted) return;
+      setState(() => _canResend = false);
+      _timer = Timer(const Duration(seconds: 30), () {
+        if (mounted) setState(() => _canResend = true);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Verification email sent again.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not send the email. Please try again shortly.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _logout() async {
+    if (_loggingOut) return;
+    setState(() => _loggingOut = true);
+    try {
+      await AuthService.instance.logout();
+      // AuthGate reacts to the auth stream and routes back to login.
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loggingOut = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logout failed. Please try again.')),
+      );
+    }
   }
 
   @override
@@ -98,7 +123,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
                 ),
                 const SizedBox(height: 8),
                 TextButton(
-                  onPressed: () => AuthService.instance.logout(),
+                  onPressed: _loggingOut ? null : _logout,
                   child: const Text('Logout'),
                 ),
               ],

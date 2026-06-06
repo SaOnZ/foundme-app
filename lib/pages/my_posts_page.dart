@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/item_service.dart';
 import '../services/auth_service.dart';
 import '../models/item.dart';
+import '../models/status.dart';
 import 'add_item_page.dart';
 import 'item_detail_page.dart';
 
@@ -143,12 +144,12 @@ class MyPostsPage extends StatelessWidget {
                   },
                   itemBuilder: (_) => [
                     const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    if (it.status == 'active')
+                    if (it.status == ItemStatus.active)
                       const PopupMenuItem(
                         value: 'close',
                         child: Text('Mark as closed'),
                       ),
-                    if (it.status != 'active')
+                    if (it.status != ItemStatus.active)
                       const PopupMenuItem(
                         value: 'reopen',
                         child: Text('Reopen'),
@@ -172,15 +173,15 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     Color bg;
-    switch (status) {
-      case 'active':
+    switch (ItemStatus.normalize(status)) {
+      case ItemStatus.active:
         bg = colors.primaryContainer;
         break;
-      case 'closed':
+      case ItemStatus.closed:
         bg = colors.surfaceContainerHighest;
         break;
-      case 'matched':
-        bg = colors.tertiaryContainer;
+      case ItemStatus.rejected:
+        bg = colors.errorContainer;
         break;
       default:
         bg = colors.surfaceContainerHighest;

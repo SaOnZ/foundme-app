@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/item.dart';
+import '../models/status.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/item_service.dart';
@@ -565,14 +566,14 @@ class ProfilePage extends StatelessWidget {
   ) {
     // Define color for status chip
     Color statusColor;
-    switch (item.status) {
-      case 'active':
+    switch (ItemStatus.normalize(item.status)) {
+      case ItemStatus.active:
         statusColor = Colors.blue;
         break;
-      case 'closed':
+      case ItemStatus.closed:
         statusColor = Colors.green;
         break;
-      case 'rejected':
+      case ItemStatus.rejected:
         statusColor = Colors.red;
         break;
       default:

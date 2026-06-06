@@ -6,7 +6,7 @@ class ClaimModel {
   final String ownerUid;
   final String claimerUid;
   final String message; // initial message
-  final String status; // pending | accepted | rejected | closed
+  final String status; // see ClaimStatus: pending | accepted | declined | closed
   final Timestamp createdAt;
 
   final bool ownerHasReviewed;

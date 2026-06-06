@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/item.dart';
+import '../models/status.dart';
 import '../services/auth_service.dart';
 import '../services/claim_service.dart';
 import 'chat_page.dart';
@@ -83,7 +84,7 @@ class ItemDetailPage extends StatelessWidget {
       final acceptedClaim = await FirebaseFirestore.instance
           .collection('claims')
           .where('itemId', isEqualTo: item.id)
-          .where('status', isEqualTo: 'accepted')
+          .where('status', isEqualTo: ClaimStatus.accepted)
           .limit(1)
           .get();
 
@@ -93,7 +94,7 @@ class ItemDetailPage extends StatelessWidget {
         await FirebaseFirestore.instance
             .collection('items')
             .doc(item.id)
-            .update({'status': 'closed'});
+            .update({'status': ItemStatus.closed});
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
@@ -327,8 +328,10 @@ class ItemDetailPage extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
 
-                      // RESOLVE BUTTON (Only show if not already closed)
-                      if (item.status != 'closed')
+                      // RESOLVE BUTTON — only meaningful for a live (active)
+                      // post; a pending_approval item was never published, so
+                      // "resolving" it makes no sense (M12).
+                      if (item.status == ItemStatus.active)
                         Expanded(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
@@ -345,7 +348,7 @@ class ItemDetailPage extends StatelessWidget {
                 ],
               ),
             )
-          else if (item.status != 'active')
+          else if (item.status != ItemStatus.active)
             const Center(
               child: Text(
                 'This post is not active.',
@@ -385,11 +388,13 @@ class ItemDetailPage extends StatelessWidget {
                 if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
                   final data =
                       snapshot.data!.docs.first.data() as Map<String, dynamic>;
-                  final status = data['status'];
+                  final status = ClaimStatus.normalize(
+                    data['status'] as String?,
+                  );
 
-                  if (status == 'pending') isPending = true;
-                  if (status == 'declined') isDeclined = true;
-                  if (status == 'accepted') isAccepted = true;
+                  if (status == ClaimStatus.pending) isPending = true;
+                  if (status == ClaimStatus.declined) isDeclined = true;
+                  if (status == ClaimStatus.accepted) isAccepted = true;
                 }
 
                 // Logic: Show "Accepted" (Green)

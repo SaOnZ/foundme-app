@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/item_service.dart';
 import '../models/item.dart';
+import '../models/status.dart';
 
 class ApprovalsTab extends StatelessWidget {
   const ApprovalsTab({super.key});
@@ -318,7 +319,7 @@ class _ApprovalActionsState extends State<_ApprovalActions> {
       ),
     );
     if (ok == true) {
-      await _setStatus('rejected', 'Post rejected');
+      await _setStatus(ItemStatus.rejected, 'Post rejected');
     }
   }
 
@@ -358,7 +359,7 @@ class _ApprovalActionsState extends State<_ApprovalActions> {
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
             ),
-            onPressed: () => _setStatus('active', 'Post approved'),
+            onPressed: () => _setStatus(ItemStatus.active, 'Post approved'),
           ),
         ),
       ],

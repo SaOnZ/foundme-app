@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'auth_service.dart';
 import '../models/claim.dart';
+import '../models/status.dart';
 import '../models/chat_message.dart';
 
 /// Thrown when a claim action can't proceed (e.g. it was already accepted or
@@ -31,7 +32,7 @@ class ClaimService {
     final dup = await _claims
         .where('itemId', isEqualTo: itemId)
         .where('claimerUid', isEqualTo: uid)
-        .where('status', whereIn: ['pending', 'accepted'])
+        .where('status', whereIn: [ClaimStatus.pending, ClaimStatus.accepted])
         .limit(1)
         .get();
     if (dup.docs.isNotEmpty) {
@@ -44,7 +45,7 @@ class ClaimService {
       'ownerUid': ownerUid,
       'claimerUid': uid,
       'message': initialMessage.trim(),
-      'status': 'pending',
+      'status': ClaimStatus.pending,
       'createdAt': FieldValue.serverTimestamp(),
     });
     return doc.id;
@@ -72,8 +73,8 @@ class ClaimService {
       }
       final claimData = claimSnap.data() as Map<String, dynamic>;
       final status = claimData['status'];
-      if (status == 'accepted') return; // already accepted — idempotent
-      if (status != 'pending') {
+      if (status == ClaimStatus.accepted) return; // idempotent
+      if (status != ClaimStatus.pending) {
         throw ClaimActionException('This claim can no longer be accepted.');
       }
 
@@ -95,13 +96,13 @@ class ClaimService {
     try {
       final siblings = await _claims
           .where('itemId', isEqualTo: itemId)
-          .where('status', isEqualTo: 'pending')
+          .where('status', isEqualTo: ClaimStatus.pending)
           .get();
       if (siblings.docs.isNotEmpty) {
         final batch = _db.batch();
         for (final d in siblings.docs) {
           if (d.id == claimId) continue;
-          batch.update(d.reference, {'status': 'declined'});
+          batch.update(d.reference, {'status': ClaimStatus.declined});
         }
         await batch.commit();
       }
@@ -124,15 +125,15 @@ class ClaimService {
       }
       final claimData = claimSnap.data() as Map<String, dynamic>;
       final status = claimData['status'];
-      if (status == 'declined') return; // idempotent
-      if (status != 'pending' && status != 'accepted') {
+      if (status == ClaimStatus.declined) return; // idempotent
+      if (status != ClaimStatus.pending && status != ClaimStatus.accepted) {
         throw ClaimActionException('This claim can no longer be declined.');
       }
 
-      txn.update(claimRef, {'status': 'declined'});
+      txn.update(claimRef, {'status': ClaimStatus.declined});
 
       // If this was the accepted claim, release the item lock.
-      if (status == 'accepted' && itemId.isNotEmpty) {
+      if (status == ClaimStatus.accepted && itemId.isNotEmpty) {
         final itemRef = _db.collection('items').doc(itemId);
         final itemSnap = await txn.get(itemRef);
         final accepted =
@@ -191,8 +192,12 @@ class ClaimService {
   Future<void> closeClaimAndItem(String claimId, String itemId) async {
     final db = FirebaseFirestore.instance;
     final batch = db.batch();
-    batch.update(db.collection('claims').doc(claimId), {'status': 'closed'});
-    batch.update(db.collection('items').doc(itemId), {'status': 'closed'});
+    batch.update(db.collection('claims').doc(claimId), {
+      'status': ClaimStatus.closed,
+    });
+    batch.update(db.collection('items').doc(itemId), {
+      'status': ItemStatus.closed,
+    });
     await batch.commit();
   }
 

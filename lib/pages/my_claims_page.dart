@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/claim_service.dart';
 import '../models/claim.dart';
+import '../models/status.dart';
 import 'chat_page.dart';
 import '../widgets/rating_dialog.dart';
 import '../models/item.dart';
@@ -15,14 +16,18 @@ class MyClaimsPage extends StatelessWidget {
     Color chipColor;
     String label;
 
-    switch (status) {
-      case 'accepted':
+    switch (ClaimStatus.normalize(status)) {
+      case ClaimStatus.accepted:
         chipColor = Colors.green;
         label = 'Accepted';
         break;
-      case 'declined':
+      case ClaimStatus.declined:
         chipColor = Colors.red;
         label = 'Declined';
+        break;
+      case ClaimStatus.closed:
+        chipColor = Colors.grey;
+        label = 'Closed';
         break;
       default:
         chipColor = Colors.orange;
@@ -86,7 +91,7 @@ class MyClaimsPage extends StatelessWidget {
 
               Widget? trailingButton;
               // Show "Rate" button if the claim is completed and user hasn't reviewed yet
-              if (c.status == 'closed' && !c.claimerHasReviewed) {
+              if (c.status == ClaimStatus.closed && !c.claimerHasReviewed) {
                 trailingButton = TextButton(
                   child: const Text('Rate Owner'),
                   onPressed: () async {

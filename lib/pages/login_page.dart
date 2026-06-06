@@ -23,11 +23,13 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  String? _emailV(String? v) => (v == null || v.isEmpty || !v.contains('@'))
+  static final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  String? _emailV(String? v) =>
+      (v == null || !_emailRe.hasMatch(v.trim()))
       ? 'Enter a valid email'
       : null;
   String? _passV(String? v) =>
-      (v == null || v.length < 8) ? 'Min 8 characters' : null;
+      (v == null || v.trim().isEmpty) ? 'Enter your password' : null;
 
   void _showErrorDialog(String message) {
     showDialog(
@@ -57,20 +59,15 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _submit() async {
-    // 1. Check for empty fields FIRST
-    if (_email.text.isEmpty || _pass.text.isEmpty) {
-      _showErrorDialog("Please fill out all fields!");
-      return;
-    }
-
-    // 2. Standard validation
+    // Field presence + email shape are enforced by the form validators, so a
+    // single validate() call covers them and shows inline errors.
     if (!_form.currentState!.validate()) return;
 
     setState(() => _loading = true);
 
     try {
       await AuthService.instance.login(
-        email: _email.text,
+        email: _email.text.trim(),
         password: _pass.text,
       );
 

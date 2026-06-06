@@ -30,8 +30,9 @@ class _RegisterPageState extends State<RegisterPage> {
 
   String? _nameV(String? v) =>
       (v == null || v.trim().length < 2) ? 'Enter your name' : null;
+  static final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
   String? _emailV(String? v) =>
-      (v == null || !v.contains('@')) ? 'Enter a valid email' : null;
+      (v == null || !_emailRe.hasMatch(v.trim())) ? 'Enter a valid email' : null;
   String? _passV(String? v) {
     if (v == null || v.length < 8) return 'Min 8 characters';
     if (!RegExp(r'[A-Za-z]').hasMatch(v) || !RegExp(r'\d').hasMatch(v)) {
@@ -72,16 +73,9 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _submit() async {
-    if (_name.text.isEmpty || _email.text.isEmpty || _pass.text.isEmpty) {
-      _showErrorDialog("Please fill out all fields.");
-      return;
-    }
-
-    if (_pass.text != _confirm.text) {
-      _showErrorDialog("Password do not match.");
-      return;
-    }
-
+    // All field rules (presence, trimming, password match) live in the
+    // TextFormField validators now, so a single validate() call covers them
+    // and shows inline errors instead of a dialog.
     if (!_form.currentState!.validate()) return;
 
     setState(() => _loading = true);
@@ -106,7 +100,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Verification email. Please check you inbox.'),
+          content: Text('Verification email sent. Please check your inbox.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -117,7 +111,13 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       String msg = 'Registration failed.';
-      if (e.toString().contains('email-already-in-use')) {
+      if (e.toString().contains('partial-upgrade')) {
+        // Account was already linked; finishing setup failed. Don't tell them
+        // to re-register — send them to log in and resend verification.
+        msg =
+            'Your account was created but setup didn\'t finish. '
+            'Please log in and resend the verification email.';
+      } else if (e.toString().contains('email-already-in-use')) {
         msg = 'That email is already registered.';
       } else if (e.toString().contains('invalid-email')) {
         msg = 'That email address is invalid.';
@@ -248,9 +248,13 @@ class _RegisterPageState extends State<RegisterPage> {
                       filled: true,
                       fillColor: Colors.grey.shade50,
                     ),
-                    validator: (v) => (v == null || v.isEmpty)
-                        ? 'Please confirm your password'
-                        : null,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'Please confirm your password';
+                      }
+                      if (v != _pass.text) return 'Passwords do not match';
+                      return null;
+                    },
                   ),
 
                   const SizedBox(height: 30),

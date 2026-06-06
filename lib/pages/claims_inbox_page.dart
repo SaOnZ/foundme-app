@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/claim_service.dart';
 import '../models/claim.dart';
+import '../models/status.dart';
 import 'chat_page.dart';
 import '../models/item.dart';
 import '../models/user_model.dart';
@@ -15,16 +16,16 @@ class ClaimsInboxPage extends StatelessWidget {
     Color chipColor;
     String label;
 
-    switch (status) {
-      case 'accepted':
+    switch (ClaimStatus.normalize(status)) {
+      case ClaimStatus.accepted:
         chipColor = Colors.green;
         label = 'Accepted';
         break;
-      case 'declined':
+      case ClaimStatus.declined:
         chipColor = Colors.red;
         label = 'Declined';
         break;
-      case 'closed':
+      case ClaimStatus.closed:
         chipColor = Colors.grey;
         label = 'Closed';
         break;
@@ -151,7 +152,7 @@ class ClaimsInboxPage extends StatelessWidget {
                             ],
                           ),
                           isThreeLine: true,
-                          trailing: c.status == 'pending'
+                          trailing: c.status == ClaimStatus.pending
                               ? _ClaimActionButtons(claim: c)
                               : null,
                         );

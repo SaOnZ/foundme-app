@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/claim_service.dart';
 import '../services/auth_service.dart';
 import '../models/chat_message.dart';
+import '../models/status.dart';
 import '../widgets/rating_dialog.dart';
 import '../models/user_model.dart';
 
@@ -179,7 +180,7 @@ class _ChatPageState extends State<ChatPage> {
         // all logic is now inside the builder
         final data = snap.data!.data() as Map<String, dynamic>;
         final isOwner = data['ownerUid'] == me;
-        final status = (data['status'] ?? 'pending') as String;
+        final status = ClaimStatus.normalize(data['status'] as String?);
         final otherUserUid = isOwner ? data['claimerUid'] : data['ownerUid'];
 
         return Scaffold(
@@ -230,7 +231,7 @@ class _ChatPageState extends State<ChatPage> {
             // the claim is closed. Showing these buttons to the claimer used
             // to silently fail at the rules layer.
             actions: [
-              if (isOwner && status == 'pending') ...[
+              if (isOwner && status == ClaimStatus.pending) ...[
                 IconButton(
                   tooltip: 'Decline',
                   icon: const Icon(Icons.cancel_outlined),
@@ -258,7 +259,7 @@ class _ChatPageState extends State<ChatPage> {
                         ),
                 ),
               ],
-              if (isOwner && status == 'accepted')
+              if (isOwner && status == ClaimStatus.accepted)
                 IconButton(
                   tooltip: 'Mark resolved',
                   icon: const Icon(Icons.check_circle_outline),
@@ -266,7 +267,7 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               // Persistent rating entry once the claim is closed, so a
               // dismissed rating dialog can still be completed later.
-              if (status == 'closed' &&
+              if (status == ClaimStatus.closed &&
                   isOwner &&
                   !((data['ownerHasReviewed'] ?? false) as bool))
                 TextButton(
@@ -274,7 +275,7 @@ class _ChatPageState extends State<ChatPage> {
                       _rate('claimer', (data['claimerUid'] ?? '') as String),
                   child: const Text('Rate claimer'),
                 ),
-              if (status == 'closed' &&
+              if (status == ClaimStatus.closed &&
                   !isOwner &&
                   !((data['claimerHasReviewed'] ?? false) as bool))
                 TextButton(
@@ -355,9 +356,8 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
 
-              if (status == 'declined' ||
-                  status == 'rejected' ||
-                  status == 'closed')
+              if (status == ClaimStatus.declined ||
+                  status == ClaimStatus.closed)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),

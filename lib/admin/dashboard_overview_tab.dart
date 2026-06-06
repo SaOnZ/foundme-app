@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart'; // Needed for date formatting
 import '../services/log_service.dart';
+import '../models/status.dart';
 
 class DashboardOverviewTab extends StatelessWidget {
   const DashboardOverviewTab({super.key});
@@ -13,7 +14,7 @@ class DashboardOverviewTab extends StatelessWidget {
     final items = FirebaseFirestore.instance.collection('items');
     final results = await Future.wait([
       items.count().get(),
-      items.where('status', isEqualTo: 'pending_approval').count().get(),
+      items.where('status', isEqualTo: ItemStatus.pendingApproval).count().get(),
       items.where('type', isEqualTo: 'lost').count().get(),
       items.where('type', isEqualTo: 'found').count().get(),
     ]);
@@ -210,14 +211,19 @@ class DashboardOverviewTab extends StatelessWidget {
                     IconData statusIcon = Icons.info;
                     Color statusColor = Colors.grey;
 
-                    if (status == 'active' || status == 'approved') {
+                    // These are LogService activity statuses, not raw item
+                    // statuses; normalize so legacy 'approved'/'pending' map
+                    // onto the canonical values the app actually writes.
+                    final norm = ItemStatus.normalize(status as String?);
+                    if (norm == ItemStatus.active) {
                       statusIcon = Icons.check_circle;
                       statusColor = Colors.green;
-                    } else if (status == 'pending') {
+                    } else if (norm == ItemStatus.pendingApproval) {
                       statusIcon = Icons.pending;
                       statusColor = Colors.orange;
-                    } else if (status == 'rejected' ||
-                        status == 'closed' ||
+                    } else if (norm == ItemStatus.rejected ||
+                        norm == ItemStatus.closed ||
+                        norm == ItemStatus.expired ||
                         status == 'banned') {
                       statusIcon = Icons.cancel;
                       statusColor = Colors.red;

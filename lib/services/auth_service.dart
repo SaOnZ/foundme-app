@@ -248,13 +248,26 @@ class AuthService {
       password: password,
     );
 
+    // Linking is the irreversible step: once it succeeds the anonymous account
+    // IS now an email account. If a later step (profile doc / verification
+    // email) fails, we must NOT report a generic "registration failed" — that
+    // would push the user to re-register an email that's already linked. Signal
+    // a distinct 'partial-upgrade' so the UI can tell them to just log in.
     await user.linkWithCredential(cred);
-    await user.updateDisplayName(name.trim());
-    await user.getIdToken(true);
 
-    await _ensureUserDoc(user, name: name.trim(), email: email.trim());
-
-    await user.sendEmailVerification();
+    try {
+      await user.updateDisplayName(name.trim());
+      await user.getIdToken(true);
+      await _ensureUserDoc(user, name: name.trim(), email: email.trim());
+      await user.sendEmailVerification();
+    } catch (e) {
+      throw FirebaseAuthException(
+        code: 'partial-upgrade',
+        message:
+            'Your account was created but we could not finish setting it up. '
+            'Please log in and resend the verification email.',
+      );
+    }
   }
 
   // --- GOOGLE SIGN IN LOGIC ---
