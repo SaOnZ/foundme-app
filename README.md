@@ -20,6 +20,18 @@ A campus lost-and-found app for **USIM (Universiti Sains Islam Malaysia)** stude
 
 **Housekeeping.** Items auto-expire after 90 days; the feed only queries within that window.
 
+## Screenshots
+
+| Feed | Item detail | Add item (AI fill) |
+|---|---|---|
+| <img src="docs/screenshots/feed.png" width="220"> | <img src="docs/screenshots/item-detail.png" width="220"> | <img src="docs/screenshots/add-item.png" width="220"> |
+
+| Map view | Claims & chat | Admin console |
+|---|---|---|
+| <img src="docs/screenshots/map.png" width="220"> | <img src="docs/screenshots/chat.png" width="220"> | <img src="docs/screenshots/admin.png" width="220"> |
+
+> Drop the PNGs into `docs/screenshots/` with the filenames above and they'll render here. Capture them with `flutter screenshot` or your emulator's snapshot button.
+
 ## Architecture
 
 ```
