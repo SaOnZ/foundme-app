@@ -90,19 +90,19 @@ Five tabs: **Overview** (charts), **Approvals** (approve/reject posts, review ma
 ## 🔄 How an item moves through the app
 
 ```mermaid
-flowchart LR
-    A["📸 User posts item"] --> B["🧠 Gemini fills<br/>title · desc · tags"]
-    B --> C{{"pending_approval"}}
-    C -->|admin approves| D["✅ active — live in feed"]
-    C -->|admin rejects| X["❌ rejected"]
-    D --> E["🤝 Someone claims it"]
-    E --> F{{"pending"}}
-    F -->|owner accepts| G["accepted — item locked,<br/>siblings auto-declined"]
-    F -->|owner declines| H["declined"]
-    G --> I["💬 Private chat"]
-    I --> J["⭐ Both rate each other"]
-    J --> K{{"closed"}}
-    D -->|90 days| L["🕒 expired"]
+flowchart TD
+    A[User posts item] --> B[Gemini fills title, desc, tags]
+    B --> C[pending_approval]
+    C -->|admin approves| D[active - live in feed]
+    C -->|admin rejects| X[rejected]
+    D -->|90 days| L[expired]
+    D --> E[Someone claims it]
+    E --> F[pending]
+    F -->|owner declines| H[declined]
+    F -->|owner accepts| G[accepted - item locked, siblings auto-declined]
+    G --> I[Private chat]
+    I --> J[Both rate each other]
+    J --> K[closed]
 ```
 
 ## 🏗️ Architecture
